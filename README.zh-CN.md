@@ -91,7 +91,7 @@ powershell -ExecutionPolicy Bypass -File .\\uninstall.ps1 -Purge
 
 卸载脚本会自动尝试移除系统/用户信任库中的 “VibeGuard CA”。若自动移除失败（如权限不足），请再手动移除。
 
-## Docker 部署
+## Docker 部署(推荐)
 
 默认 `docker-compose.yml` 使用 GHCR 的预构建镜像（仅绑定到本机 127.0.0.1，避免误暴露到局域网）：
 
@@ -99,6 +99,8 @@ powershell -ExecutionPolicy Bypass -File .\\uninstall.ps1 -Purge
 docker compose pull
 docker compose up -d
 ```
+
+安全建议（更适合 vibecoding 场景）：尽量让 VibeGuard 的状态文件留在 *Docker 内部*（默认）。当前 `docker-compose.yml` 使用 Docker 命名卷 `vibeguard-data` 挂载到 `/root/.vibeguard`，因此宿主机本地默认不会落下 CA 私钥或配置文件。请避免把它改成类似 `~/.vibeguard:/root/.vibeguard` 的目录映射；如需宿主机信任证书，只导出 **`ca.crt`** 即可（不要拷贝 `ca.key`）。
 
 从源码构建：
 
@@ -112,9 +114,13 @@ docker compose -f docker-compose.yml -f docker-compose.source.yml up -d --build
 docker compose logs -f vibeguard
 ```
 
-从容器导出 CA 证书到宿主机文件：
+完整 Docker 部署流程（含导出 CA 证书到宿主机文件）：
 
 ```bash
+git clone https://github.com/inkdust2021/VibeGuard.git
+cd VibeGuard
+docker compose pull
+docker compose up -d
 docker compose exec -T vibeguard cat /root/.vibeguard/ca.crt > vibeguard-ca.crt
 ```
 

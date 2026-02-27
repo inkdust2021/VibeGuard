@@ -94,7 +94,7 @@ powershell -ExecutionPolicy Bypass -File .\\uninstall.ps1 -Purge
 
 The uninstallers try to remove the trusted CA (“VibeGuard CA”) automatically. If it fails (e.g., permissions), remove it manually.
 
-## Docker
+## Docker(recommend)
 
 By default, `docker-compose.yml` uses the prebuilt image from GHCR (binds to localhost only):
 
@@ -102,6 +102,8 @@ By default, `docker-compose.yml` uses the prebuilt image from GHCR (binds to loc
 docker compose pull
 docker compose up -d
 ```
+
+Security tip (recommended for vibecoding): keep VibeGuard state *inside Docker* (the default). `docker-compose.yml` uses a Docker named volume (`vibeguard-data`) for `/root/.vibeguard`, so your host filesystem won’t contain the CA private key or config files by default. Avoid changing this to a bind mount like `~/.vibeguard:/root/.vibeguard`. If you need host trust, export **only** `ca.crt` (do not copy `ca.key`).
 
 Build from source (contributors / before the first release image exists):
 
@@ -121,9 +123,13 @@ View logs:
 docker compose logs -f vibeguard
 ```
 
-Export CA cert from the container:
+Deploy (from scratch) and export CA cert:
 
 ```bash
+git clone https://github.com/inkdust2021/VibeGuard.git
+cd VibeGuard
+docker compose pull
+docker compose up -d
 docker compose exec -T vibeguard cat /root/.vibeguard/ca.crt > vibeguard-ca.crt
 ```
 
