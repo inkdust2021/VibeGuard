@@ -141,6 +141,9 @@
             <span class="lang-switch" data-lang="en" onclick="setLang('en')">EN</span>
           </div>
         </div>
+        <div class="flex justify-end">
+          <button id="auth-logout-btn" class="btn btn-secondary text-xs px-3 py-1" style="display:none" onclick="authLogout()" data-i18n="auth.logout">退出登录</button>
+        </div>
       </div>
     </aside>
     <main class="flex-1 p-8 bg-surface/50" id="main-content"></main>
@@ -158,6 +161,30 @@ const i18n = {
     'nav.certs': '证书管理',
     'nav.logs': '调试日志',
     'status.running': '运行中',
+    'auth.setup.title': '设置管理密码',
+    'auth.setup.subtitle': '首次访问管理面板需要设置一个密码，用于保护本机管理端 API。',
+    'auth.login.title': '管理员登录',
+    'auth.login.subtitle': '请输入管理密码以继续。',
+    'auth.password': '密码',
+    'auth.passwordPlaceholder': '请输入密码',
+    'auth.passwordConfirm': '确认密码',
+    'auth.passwordConfirmPlaceholder': '再次输入密码',
+    'auth.setup.note': '密码至少 8 位；仅用于本机管理端鉴权。',
+    'auth.securityHint': '安全提示：建议保持只监听 127.0.0.1，避免把 /manager/ 暴露到局域网或公网。',
+    'auth.setup.button': '设置并进入',
+    'auth.login.button': '登录',
+    'auth.required': '请填写密码',
+    'auth.mismatch': '两次输入的密码不一致',
+    'auth.tooShort': '密码至少 8 位',
+    'auth.setup.success': '已设置管理密码',
+    'auth.setup.failed': '设置失败',
+    'auth.login.success': '登录成功',
+    'auth.login.failed': '登录失败',
+    'auth.logout': '退出登录',
+    'auth.logout.success': '已退出登录',
+    'auth.broken.title': '鉴权文件异常',
+    'auth.broken.subtitle': '无法读取管理端鉴权信息，已暂时禁用管理端 API。',
+    'auth.broken.hint': '可删除 ~/.vibeguard/admin_auth.json 以重置管理密码，然后刷新页面重新设置。',
     'dashboard.title': '仪表盘',
     'dashboard.subtitle': '实时代理统计',
     'dashboard.activeMappings': '活跃映射',
@@ -323,6 +350,30 @@ const i18n = {
     'nav.certs': 'Certificates',
     'nav.logs': 'Debug Logs',
     'status.running': 'Running',
+    'auth.setup.title': 'Set Admin Password',
+    'auth.setup.subtitle': 'First-time access requires setting a password to protect the local admin API.',
+    'auth.login.title': 'Admin Login',
+    'auth.login.subtitle': 'Enter the admin password to continue.',
+    'auth.password': 'Password',
+    'auth.passwordPlaceholder': 'Enter password',
+    'auth.passwordConfirm': 'Confirm password',
+    'auth.passwordConfirmPlaceholder': 'Re-enter password',
+    'auth.setup.note': 'Password must be at least 8 characters (local admin auth only).',
+    'auth.securityHint': 'Security tip: keep binding to 127.0.0.1 to avoid exposing /manager/ to LAN/public networks.',
+    'auth.setup.button': 'Set & Continue',
+    'auth.login.button': 'Login',
+    'auth.required': 'Please enter password',
+    'auth.mismatch': 'Passwords do not match',
+    'auth.tooShort': 'Password must be at least 8 characters',
+    'auth.setup.success': 'Password set',
+    'auth.setup.failed': 'Setup failed',
+    'auth.login.success': 'Logged in',
+    'auth.login.failed': 'Login failed',
+    'auth.logout': 'Logout',
+    'auth.logout.success': 'Logged out',
+    'auth.broken.title': 'Auth store error',
+    'auth.broken.subtitle': 'Failed to read admin auth data; admin API is temporarily disabled.',
+    'auth.broken.hint': 'Delete ~/.vibeguard/admin_auth.json to reset the password, then refresh to set it again.',
     'dashboard.title': 'Dashboard',
     'dashboard.subtitle': 'Real-time proxy statistics',
     'dashboard.activeMappings': 'Active Mappings',
@@ -557,6 +608,7 @@ async function initLang() {
 }
 
 const state = { stats: { proxy: {}, session: {}, requests: {} }, patterns: { keywords: [], regex: [], builtin: [], exclude: [] }, sessions: { total: 0, mappings: [] }, certs: { ca: {} }, audit: { redact_log: true, max_events: 200, events: [] }, logs: { configured_path: '', effective_path: '', exists: false, lines: [], warning: '' } };
+state.auth = { configured: false, authenticated: false, broken: false, broken_error: '' };
 let auditES = null;
 let logsES = null;
 async function throwHttpError(r) {
@@ -564,10 +616,86 @@ async function throwHttpError(r) {
   try { detail = (await r.text()).trim(); } catch (e) { /* ignore */ }
   throw new Error(detail ? ('HTTP ' + r.status + ': ' + detail) : ('HTTP ' + r.status));
 }
+async function refreshAuthStatus() {
+  try {
+    const r = await fetch('/manager/api/auth/status', { cache: 'no-store', credentials: 'same-origin' });
+    if (r.ok) {
+      const j = await r.json();
+      state.auth = {
+        configured: !!j?.configured,
+        authenticated: !!j?.authenticated,
+        broken: !!j?.broken,
+        broken_error: j?.broken_error || ''
+      };
+      return;
+    }
+  } catch (e) { /* ignore */ }
+  state.auth = { configured: false, authenticated: false, broken: false, broken_error: '' };
+}
+function setSidebarLocked(locked) {
+  document.querySelectorAll('.nav-item').forEach(el => {
+    el.classList.toggle('opacity-50', locked);
+    el.classList.toggle('pointer-events-none', locked);
+  });
+}
+function setLogoutVisible(visible) {
+  const btn = document.getElementById('auth-logout-btn');
+  if (!btn) return;
+  btn.style.display = visible ? 'inline-flex' : 'none';
+}
+async function ensureAuthedOrShowAuth() {
+  const configured = !!state.auth.configured;
+  const authed = !!state.auth.authenticated;
+  const broken = !!state.auth.broken;
+
+  if (broken) {
+    setSidebarLocked(true);
+    setLogoutVisible(false);
+    stopAuditStream();
+    stopLogsStream();
+    renderAuthBroken();
+    return false;
+  }
+  if (!configured) {
+    setSidebarLocked(true);
+    setLogoutVisible(false);
+    stopAuditStream();
+    stopLogsStream();
+    renderAuthSetup();
+    return false;
+  }
+  if (!authed) {
+    setSidebarLocked(true);
+    setLogoutVisible(false);
+    stopAuditStream();
+    stopLogsStream();
+    renderAuthLogin();
+    return false;
+  }
+
+  setSidebarLocked(false);
+  setLogoutVisible(true);
+  return true;
+}
 const api = {
-  async get(p) { const r = await fetch('/manager/api' + p, { cache: 'no-store' }); if (!r.ok) await throwHttpError(r); return r.json(); },
-  async post(p, b) { const r = await fetch('/manager/api' + p, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }); if (!r.ok) await throwHttpError(r); return r.json(); },
-  async del(p) { const r = await fetch('/manager/api' + p, { method: 'DELETE' }); if (!r.ok) await throwHttpError(r); return r; }
+  async get(p) {
+    const r = await fetch('/manager/api' + p, { cache: 'no-store', credentials: 'same-origin' });
+    if (r.status === 401 || r.status === 403) { await refreshAuthStatus(); await ensureAuthedOrShowAuth(); }
+    if (!r.ok) await throwHttpError(r);
+    return r.json();
+  },
+  async post(p, b) {
+    const r = await fetch('/manager/api' + p, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b), credentials: 'same-origin' });
+    if (r.status === 401 || r.status === 403) { await refreshAuthStatus(); await ensureAuthedOrShowAuth(); }
+    if (!r.ok) await throwHttpError(r);
+    return r.json();
+  },
+  async del(p) {
+    const r = await fetch('/manager/api' + p, { method: 'DELETE', credentials: 'same-origin' });
+    if (r.status === 401 || r.status === 403) { await refreshAuthStatus(); await ensureAuthedOrShowAuth(); }
+    if (!r.ok) await throwHttpError(r);
+    return r;
+  }
 };
 function toast(m, type = 'success') { const e = document.createElement('div'); e.className = 'toast toast-' + type + ' fade-in'; e.textContent = m; document.body.appendChild(e); setTimeout(() => e.remove(), 3000); }
 function esc(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
@@ -607,6 +735,11 @@ function normalizePatterns(p) {
 }
 
 function route() {
+  if (!state.auth || !state.auth.authenticated) {
+    // 首次进入先走鉴权逻辑（setup/login），避免在未登录时触发大量 API 请求。
+    ensureAuthedOrShowAuth();
+    return;
+  }
   const h = window.location.hash || '#/', p = h.slice(2) || 'dashboard';
   document.querySelectorAll('.nav-item').forEach(e => { e.classList.remove('active'); if (e.dataset.page === p || (p === '' && e.dataset.page === 'dashboard')) e.classList.add('active'); });
   const c = document.getElementById('main-content'); c.classList.add('fade-in');
@@ -619,6 +752,121 @@ function route() {
   else if (p === 'certs') renderCerts();
   else if (p === 'logs') renderLogs();
   else c.innerHTML = '<div class="text-center py-20 text-muted">Page not found</div>';
+}
+
+function renderAuthSetup() {
+  const c = document.getElementById('main-content');
+  c.innerHTML =
+    '<div class="max-w-xl mx-auto pt-20">' +
+      '<div class="card p-8">' +
+        '<div class="mb-6">' +
+          '<h2 class="text-2xl font-bold text-text">' + t('auth.setup.title') + '</h2>' +
+          '<p class="text-muted mt-2 text-sm">' + t('auth.setup.subtitle') + '</p>' +
+        '</div>' +
+        '<div class="space-y-4">' +
+          '<div>' +
+            '<label class="text-sm text-muted block mb-1">' + t('auth.password') + '</label>' +
+            '<input id="auth-setup-password" type="password" class="w-full" placeholder="' + esc(t('auth.passwordPlaceholder')) + '" />' +
+          '</div>' +
+          '<div>' +
+            '<label class="text-sm text-muted block mb-1">' + t('auth.passwordConfirm') + '</label>' +
+            '<input id="auth-setup-confirm" type="password" class="w-full" placeholder="' + esc(t('auth.passwordConfirmPlaceholder')) + '" />' +
+          '</div>' +
+          '<div class="flex items-center justify-between gap-3 pt-2">' +
+            '<div class="text-xs text-muted">' + t('auth.setup.note') + '</div>' +
+            '<button class="btn btn-primary" onclick="authSetup()">' + t('auth.setup.button') + '</button>' +
+          '</div>' +
+          '<div class="text-xs text-muted pt-2">' + t('auth.securityHint') + '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+  const p1 = document.getElementById('auth-setup-password');
+  const p2 = document.getElementById('auth-setup-confirm');
+  if (p1) p1.addEventListener('keydown', e => { if (e.key === 'Enter') authSetup(); });
+  if (p2) p2.addEventListener('keydown', e => { if (e.key === 'Enter') authSetup(); });
+}
+
+function renderAuthLogin() {
+  const c = document.getElementById('main-content');
+  c.innerHTML =
+    '<div class="max-w-xl mx-auto pt-24">' +
+      '<div class="card p-8">' +
+        '<div class="mb-6">' +
+          '<h2 class="text-2xl font-bold text-text">' + t('auth.login.title') + '</h2>' +
+          '<p class="text-muted mt-2 text-sm">' + t('auth.login.subtitle') + '</p>' +
+        '</div>' +
+        '<div class="space-y-4">' +
+          '<div>' +
+            '<label class="text-sm text-muted block mb-1">' + t('auth.password') + '</label>' +
+            '<input id="auth-login-password" type="password" class="w-full" placeholder="' + esc(t('auth.passwordPlaceholder')) + '" />' +
+          '</div>' +
+          '<div class="flex justify-end pt-2">' +
+            '<button class="btn btn-primary" onclick="authLogin()">' + t('auth.login.button') + '</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+  const p = document.getElementById('auth-login-password');
+  if (p) p.addEventListener('keydown', e => { if (e.key === 'Enter') authLogin(); });
+}
+
+function renderAuthBroken() {
+  const c = document.getElementById('main-content');
+  const detail = state.auth?.broken_error ? ('<div class="mt-2 text-xs text-muted break-all">' + esc(state.auth.broken_error) + '</div>') : '';
+  c.innerHTML =
+    '<div class="max-w-xl mx-auto pt-24">' +
+      '<div class="card p-8">' +
+        '<h2 class="text-2xl font-bold text-text">' + t('auth.broken.title') + '</h2>' +
+        '<p class="text-muted mt-2 text-sm">' + t('auth.broken.subtitle') + '</p>' +
+        detail +
+        '<div class="text-xs text-muted mt-6">' + t('auth.broken.hint') + '</div>' +
+      '</div>' +
+    '</div>';
+}
+
+async function authSetup() {
+  const p1 = document.getElementById('auth-setup-password');
+  const p2 = document.getElementById('auth-setup-confirm');
+  const v1 = (p1?.value || '').trim();
+  const v2 = (p2?.value || '').trim();
+  if (!v1 || !v2) { toast(t('auth.required'), 'error'); return; }
+  if (v1 !== v2) { toast(t('auth.mismatch'), 'error'); return; }
+  if (v1.length < 8) { toast(t('auth.tooShort'), 'error'); return; }
+  try {
+    const r = await fetch('/manager/api/auth/setup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: v1 }), credentials: 'same-origin' });
+    if (!r.ok) await throwHttpError(r);
+    await refreshAuthStatus();
+    toast(t('auth.setup.success'));
+    if (await ensureAuthedOrShowAuth()) route();
+  } catch (e) {
+    toast(t('auth.setup.failed') + ': ' + e.message, 'error');
+  }
+}
+
+async function authLogin() {
+  const p = document.getElementById('auth-login-password');
+  const v = (p?.value || '').trim();
+  if (!v) { toast(t('auth.required'), 'error'); return; }
+  try {
+    const r = await fetch('/manager/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: v }), credentials: 'same-origin' });
+    if (!r.ok) await throwHttpError(r);
+    await refreshAuthStatus();
+    toast(t('auth.login.success'));
+    if (await ensureAuthedOrShowAuth()) route();
+  } catch (e) {
+    toast(t('auth.login.failed') + ': ' + e.message, 'error');
+  }
+}
+
+async function authLogout() {
+  try {
+    await fetch('/manager/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
+  } catch (e) { /* ignore */ }
+  await refreshAuthStatus();
+  toast(t('auth.logout.success'));
+  ensureAuthedOrShowAuth();
 }
 
 async function renderDashboard() {
@@ -640,7 +888,17 @@ function updateStatsUI() {
   document.getElementById('proxy-address').textContent = s.proxy?.listen_address ?? '-';
   document.getElementById('stat-util').textContent = s.session?.max_mappings > 0 ? ((s.session?.active_mappings / s.session.max_mappings) * 100).toFixed(1) + '%' : '0%';
 }
-function startStatsStream() { const es = new EventSource('/manager/api/stats/stream'); es.addEventListener('stats', e => { state.stats = JSON.parse(e.data); updateStatsUI(); }); es.onerror = () => setTimeout(startStatsStream, 5000); }
+function startStatsStream() {
+  if (!state.auth?.authenticated) return;
+  const es = new EventSource('/manager/api/stats/stream');
+  es.addEventListener('stats', e => { state.stats = JSON.parse(e.data); updateStatsUI(); });
+  es.onerror = async () => {
+    try { es.close(); } catch (e) { /* ignore */ }
+    await refreshAuthStatus();
+    if (!state.auth?.authenticated) { ensureAuthedOrShowAuth(); return; }
+    setTimeout(startStatsStream, 5000);
+  };
+}
 function fmtUptime(s) { if (s < 60) return s + 's'; if (s < 3600) return Math.floor(s / 60) + 'm ' + (s % 60) + 's'; return Math.floor(s / 3600) + 'h ' + Math.floor((s % 3600) / 60) + 'm'; }
 function fmtDur(s) { if (s < 60) return s + 's'; if (s < 3600) return Math.floor(s / 60) + (currentLang === 'zh' ? ' 分钟' : ' minutes'); return Math.floor(s / 3600) + (currentLang === 'zh' ? ' 小时' : ' hours'); }
 
@@ -954,7 +1212,11 @@ function startAuditStream() {
   });
   auditES.onerror = () => {
     if (status) status.textContent = t('audit.reconnecting');
-    setTimeout(() => { if ((window.location.hash || '').includes('#/audit')) startAuditStream(); }, 2000);
+    setTimeout(async () => {
+      await refreshAuthStatus();
+      if (!state.auth?.authenticated) { ensureAuthedOrShowAuth(); return; }
+      if ((window.location.hash || '').includes('#/audit')) startAuditStream();
+    }, 2000);
   };
 }
 
@@ -1037,7 +1299,11 @@ function startLogsStream() {
   logsES.onerror = () => {
     if (status) status.textContent = t('logs.reconnecting');
     setTimeout(() => {
-      if ((window.location.hash || '').includes('#/logs') && (document.getElementById('logs-follow')?.checked ?? true)) startLogsStream();
+      (async () => {
+        await refreshAuthStatus();
+        if (!state.auth?.authenticated) { ensureAuthedOrShowAuth(); return; }
+        if ((window.location.hash || '').includes('#/logs') && (document.getElementById('logs-follow')?.checked ?? true)) startLogsStream();
+      })();
     }, 2000);
   };
 }
@@ -1589,9 +1855,12 @@ window.selectPreset = selectPreset;
 window.trustCert = trustCert;
 window.regenerateCert = regenerateCert;
 window.setLang = setLang;
+window.authSetup = authSetup;
+window.authLogin = authLogin;
+window.authLogout = authLogout;
 
 window.addEventListener('hashchange', route);
-initLang().then(route).catch(route);
+initLang().then(refreshAuthStatus).then(ensureAuthedOrShowAuth).then(route).catch(route);
   </script>
 </body>
 </html>

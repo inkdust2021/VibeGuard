@@ -12,6 +12,8 @@ responses (including JSON and SSE).
 - **Redaction rules**: keywords only (exact substring match; only the matched substring is replaced).
 - **Safe by default**: only scans text-like bodies (e.g., `application/json`) up to 10MB.
 - **Admin UI**: manage rules, certificates, sessions, per-request “redaction hit” events at `/manager/`, and tail debug logs at `#/logs`.
+- **Admin auth**: the admin UI/API is protected by a password (set on first visit to `/manager/`).
+- **At-rest encryption (keywords)**: keyword/exclude values are stored encrypted in `~/.vibeguard/config.yaml` using a key derived from the local CA private key (admin UI still shows plaintext). If you regenerate the CA, old encrypted values cannot be decrypted.
 - **Two interception modes**: `proxy.intercept_mode: global` (recommended for most clients) or `targets`.
 - **Hot reload**: pattern/target changes from the admin UI take effect without restarting.
 
@@ -48,6 +50,13 @@ flowchart LR
 go run ./cmd/vibeguard init
 go run ./cmd/vibeguard start --foreground
 ```
+
+## Admin UI Security
+
+- First visit to `http://127.0.0.1:28657/manager/` will ask you to set an admin password.
+- The password is stored as a bcrypt hash in `~/.vibeguard/admin_auth.json` (permissions: `0600`).
+- Forgot it? Stop VibeGuard, delete `~/.vibeguard/admin_auth.json`, then refresh `/manager/` to set a new one.
+- Keep the admin UI bound to localhost (`127.0.0.1`) and avoid exposing the port to LAN/public networks.
 
 ## Install (script)
 

@@ -17,6 +17,10 @@ func (a *Admin) Handler() http.Handler {
 	mux := http.NewServeMux()
 
 	// API routes (under /manager/api/)
+	mux.HandleFunc("/manager/api/auth/status", a.handleAuthStatus)
+	mux.HandleFunc("/manager/api/auth/setup", a.handleAuthSetup)
+	mux.HandleFunc("/manager/api/auth/login", a.handleAuthLogin)
+	mux.HandleFunc("/manager/api/auth/logout", a.handleAuthLogout)
 	mux.HandleFunc("/manager/api/stats", a.handleStats)
 	mux.HandleFunc("/manager/api/stats/stream", a.handleStatsStream)
 	mux.HandleFunc("/manager/api/patterns", a.handlePatterns)
@@ -59,7 +63,31 @@ func (a *Admin) Handler() http.Handler {
 	// Add logging middleware
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
+		// 管理端鉴权：所有 /manager/api/* 默认需要先登录（首访未设置密码则先走 setup）。
+		if strings.HasPrefix(r.URL.Path, "/manager/api/") && !isManagerPublicAPI(r.URL.Path) {
+			if a == nil || a.auth == nil {
+				http.Error(w, "Admin auth not initialized", http.StatusInternalServerError)
+				return
+			}
+			if ok := a.auth.Require(w, r); !ok {
+				return
+			}
+		}
+
 		mux.ServeHTTP(w, r)
 		slog.Debug("Admin request", "method", r.Method, "path", r.URL.Path, "duration", time.Since(start))
 	})
+}
+
+func isManagerPublicAPI(path string) bool {
+	switch path {
+	case "/manager/api/settings",
+		"/manager/api/auth/status",
+		"/manager/api/auth/setup",
+		"/manager/api/auth/login",
+		"/manager/api/auth/logout":
+		return true
+	default:
+		return false
+	}
 }

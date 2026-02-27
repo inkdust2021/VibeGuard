@@ -26,10 +26,12 @@ type Admin struct {
 	stats    *StatsCollector
 	started  atomic.Int64 // Unix timestamp
 	audit    *AuditStore
+	auth     *AuthManager
 }
 
 // New creates a new Admin handler
 func New(cfg *config.Manager, sess *session.Manager, ca *cert.CA, certPath, keyPath string) *Admin {
+	auth := NewAuthManager(defaultAuthFilePath())
 	a := &Admin{
 		config:   cfg,
 		session:  sess,
@@ -38,6 +40,7 @@ func New(cfg *config.Manager, sess *session.Manager, ca *cert.CA, certPath, keyP
 		keyPath:  keyPath,
 		stats:    &StatsCollector{},
 		audit:    NewAuditStore(200),
+		auth:     auth,
 	}
 	a.started.Store(0)
 	return a

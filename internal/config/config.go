@@ -181,6 +181,9 @@ type Manager struct {
 	configPath string
 	// projectPath 为项目级覆盖配置路径（默认 .vibeguard.yaml）。
 	projectPath string
+	// patternCrypto 用于将 patterns.keywords/exclude 的 value 以加密形式落盘（进程内仍为明文）。
+	// 该能力需要由上层注入密钥（通常从 CA 私钥派生）。
+	patternCrypto *patternCrypto
 }
 
 // NewManager creates a new config manager
@@ -236,6 +239,11 @@ func (m *Manager) Load() error {
 		cfg = mergeConfigs(cfg, projectCfg)
 		slog.Debug("Merged project config", "path", projectPath)
 	} else if !os.IsNotExist(err) {
+		return err
+	}
+
+	// 若启用了“匹配值落盘加密”，先把加载到的密文解密为明文，再做 sanitize。
+	if err := m.decryptLoadedPatterns(&cfg); err != nil {
 		return err
 	}
 
@@ -346,7 +354,11 @@ func (m *Manager) Update(fn func(*Config)) error {
 
 // saveLocked writes the current config to disk (must be called with mu held)
 func (m *Manager) saveLocked() error {
-	data, err := yaml.Marshal(&m.config)
+	toSave, err := m.encryptPatternsForSave(m.config)
+	if err != nil {
+		return err
+	}
+	data, err := yaml.Marshal(&toSave)
 	if err != nil {
 		return err
 	}
@@ -357,7 +369,12 @@ func (m *Manager) saveLocked() error {
 	if err := os.MkdirAll(filepath.Dir(cfgPath), 0700); err != nil {
 		return err
 	}
-	return os.WriteFile(cfgPath, data, 0644)
+	if err := os.WriteFile(cfgPath, data, 0600); err != nil {
+		return err
+	}
+	// 保底：若文件已存在，WriteFile 不一定会覆盖权限；这里再 chmod 一次。
+	_ = os.Chmod(cfgPath, 0600)
+	return nil
 }
 
 // Watch starts watching for config file changes

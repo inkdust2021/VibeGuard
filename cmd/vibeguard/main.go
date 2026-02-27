@@ -893,6 +893,17 @@ func runProxy(cmd *cobra.Command, args []string) error {
 		slog.Warn("CA 证书未被系统信任：启用 MITM 拦截时客户端可能报 TLS 错误；请先运行 vibeguard trust（或 vibeguard trust --mode system）", "cert_path", caCertPath)
 	}
 
+	// 用 CA 私钥派生“本机落盘加密”密钥：用于加密配置中的关键词/排除项（落盘不出现明文）。
+	if key, err := ca.DeriveStorageKey(); err != nil {
+		return fmt.Errorf("failed to derive storage key: %w", err)
+	} else if err := cfg.SetPatternEncryptionKey(key); err != nil {
+		return fmt.Errorf("failed to configure pattern encryption: %w", err)
+	}
+	// 重新加载一次配置，以便把已落盘的密文解密为明文，并确保后续保存会写回密文。
+	if err := cfg.Load(); err != nil {
+		return fmt.Errorf("failed to reload config with pattern decryption: %w", err)
+	}
+
 	// Create proxy server
 	srv, err := proxy.NewServer(cfg, ca, caCertPath, caKeyPath)
 	if err != nil {

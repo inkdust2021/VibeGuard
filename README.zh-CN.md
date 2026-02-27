@@ -9,6 +9,8 @@ VibeGuard 是一个 MITM HTTPS 代理，用于在使用 AI 编程助手（如 Co
 - **匹配规则**：只支持关键词（仅替换关键词本身）。
 - **默认更安全**：只扫描文本类请求体（如 `application/json`），且大小限制 10MB。
 - **管理页**：在 `/manager/` 配置规则/证书/会话，查看每次请求是否命中脱敏（Audit），并在 `#/logs` 查看后端调试日志。
+- **管理端鉴权**：管理面板/接口受密码保护（首次访问 `/manager/` 时设置）。
+- **落盘加密（关键词）**：关键词/排除项在 `~/.vibeguard/config.yaml` 中会以密文保存（密钥由本机 CA 私钥派生；管理页仍显示明文）。若重新生成 CA，将无法解密旧的密文值，需要重新配置关键词。
 - **两种拦截模式**：`proxy.intercept_mode: global`（更适合大多数客户端）或 `targets`。
 - **热更新**：在管理页修改规则/目标域名后无需重启即可生效。
 
@@ -45,6 +47,13 @@ flowchart LR
 go run ./cmd/vibeguard init
 go run ./cmd/vibeguard start --foreground
 ```
+
+## 管理端安全
+
+- 首次访问 `http://127.0.0.1:28657/manager/` 会要求设置管理密码。
+- 密码以 bcrypt 哈希形式保存到 `~/.vibeguard/admin_auth.json`（文件权限：`0600`）。
+- 忘记密码：停止 VibeGuard 后删除 `~/.vibeguard/admin_auth.json`，刷新 `/manager/` 重新设置即可。
+- 建议保持管理端仅监听本机（`127.0.0.1`），不要把端口暴露到局域网/公网。
 
 ## 安装（脚本）
 

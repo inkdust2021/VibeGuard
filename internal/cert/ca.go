@@ -4,6 +4,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -28,7 +29,7 @@ const (
 type CA struct {
 	cert *x509.Certificate
 	key  *ecdsa.PrivateKey
-	mu  sync.RWMutex
+	mu   sync.RWMutex
 }
 
 // LoadOrGenerateCA loads or generates a CA certificate
@@ -164,6 +165,26 @@ func (ca *CA) CertPath(dataDir string) string {
 // KeyPath returns the path to the CA private key
 func (ca *CA) KeyPath(dataDir string) string {
 	return filepath.Join(dataDir, caKeyName)
+}
+
+// DeriveStorageKey 派生一个用于“本机落盘加密”的对称密钥（32 字节）。
+//
+// 用途示例：
+// - 会话映射 WAL
+// - 配置文件中的敏感匹配值（关键词）落盘加密
+//
+// 注意：
+// - 该密钥派生自 CA 私钥；一旦 regenerate/丢失 CA 私钥，将无法解密旧数据。
+func (ca *CA) DeriveStorageKey() ([]byte, error) {
+	ca.mu.RLock()
+	defer ca.mu.RUnlock()
+	if ca.key == nil {
+		return nil, fmt.Errorf("CA private key not loaded")
+	}
+	sum := sha256.Sum256(ca.key.D.Bytes())
+	out := make([]byte, 32)
+	copy(out, sum[:])
+	return out, nil
 }
 
 // GetCertificate returns the CA certificate as PEM bytes
