@@ -1,0 +1,12 @@
+services:
+  vibeguard:
+    image: ghcr.io/inkdust2021/vibeguard:latest
+    container_name: vibeguard
+    ports:
+      - "127.0.0.1:28657:28657"
+    volumes:
+      - vibeguard-data:/root/.vibeguard
+    restart: unless-stopped
+
+volumes:
+  vibeguard-data: {}

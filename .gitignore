@@ -1,0 +1,22 @@
+# macOS
+.DS_Store
+
+# 本地工具/运行状态
+.omc/
+~/
+[{]cmd/
+temp/
+
+# 构建产物（二进制）
+/vibeguard
+*.exe
+
+# 运行日志/会话持久化/证书（避免误提交敏感数据）
+*.log
+*.wal
+*.key
+*.crt
+
+# Go
+*.test
+*.out

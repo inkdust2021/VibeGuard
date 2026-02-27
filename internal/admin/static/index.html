@@ -1,0 +1,1597 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VibeGuard 管理面板</title>
+  <link rel="icon" type="image/png" sizes="32x32" href="/manager/favicon.png">
+  <link rel="icon" type="image/png" sizes="64x64" href="/manager/favicon-64.png">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            surface: '#f8fafc',
+            border: '#e2e8f0',
+            accent: '#3b82f6',
+            text: '#1e293b',
+            muted: '#64748b',
+            success: '#22c55e',
+            warning: '#f59e0b',
+            danger: '#ef4444'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    * { transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease; }
+    .fade-in { animation: fadeIn 0.3s ease-out; }
+    .slide-up { animation: slideUp 0.3s ease-out; }
+    .scale-in { animation: scaleIn 0.2s ease-out; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+    @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+    .nav-item.active { background-color: #f1f5f9; border-right: 3px solid #3b82f6; }
+    .nav-item:hover { background-color: #f8fafc; transform: translateX(4px); }
+    .card { background: white; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+    .card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+    .btn { padding: 8px 16px; border-radius: 8px; font-weight: 500; cursor: pointer; transition: all 0.2s ease; }
+    .btn:hover { transform: translateY(-1px); }
+    .btn:active { transform: translateY(0); }
+    .btn-primary { background: #3b82f6; color: white; box-shadow: 0 2px 4px rgba(59,130,246,0.3); }
+    .btn-primary:hover { background: #2563eb; box-shadow: 0 4px 8px rgba(59,130,246,0.4); }
+    .btn-secondary { background: #f1f5f9; color: #1e293b; border: 1px solid #e2e8f0; }
+    .btn-secondary:hover { background: #e2e8f0; }
+    .btn-danger { background: #fef2f2; color: #ef4444; border: 1px solid #fecaca; }
+    .btn-danger:hover { background: #fee2e2; }
+    input, select { border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 12px; transition: all 0.2s ease; }
+    input:focus, select:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 4px rgba(59,130,246,0.1); transform: translateY(-1px); }
+    .stat-value { font-size: 2rem; font-weight: 700; color: #1e293b; animation: slideUp 0.4s ease-out; }
+    .stat-label { font-size: 0.875rem; color: #64748b; }
+    .stat-card:hover { transform: translateY(-4px); }
+    .table-row { border-bottom: 1px solid #f1f5f9; transition: all 0.15s ease; }
+    .table-row:hover { background: #f8fafc; transform: scale(1.005); }
+    .tag { display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 0.75rem; font-weight: 500; }
+    .tag-blue { background: #eff6ff; color: #3b82f6; }
+    .tag-green { background: #f0fdf4; color: #22c55e; }
+    .tag-yellow { background: #fffbeb; color: #f59e0b; }
+    .tag-red { background: #fef2f2; color: #ef4444; }
+    .toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 20px; border-radius: 8px; box-shadow: 0 10px 40px rgba(0,0,0,0.15); z-index: 1000; animation: slideUp 0.3s ease-out; }
+    .toast-success { background: #22c55e; color: white; }
+    .toast-error { background: #ef4444; color: white; }
+    .lang-switch { cursor: pointer; padding: 4px 8px; border-radius: 4px; font-size: 12px; transition: all 0.2s ease; }
+    .lang-switch:hover { background: #f1f5f9; transform: scale(1.1); }
+    .lang-switch.active { background: #3b82f6; color: white; }
+    .github-logo { transition: all 0.3s ease; }
+    .github-logo:hover { transform: rotate(360deg) scale(1.1); }
+    .loading-skeleton { background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
+    .pattern-item { animation: slideUp 0.3s ease-out backwards; }
+    .pattern-item:nth-child(1) { animation-delay: 0.05s; }
+    .pattern-item:nth-child(2) { animation-delay: 0.1s; }
+    .pattern-item:nth-child(3) { animation-delay: 0.15s; }
+    .pattern-item:nth-child(4) { animation-delay: 0.2s; }
+    .pattern-item:nth-child(5) { animation-delay: 0.25s; }
+    .delete-btn { transition: all 0.2s ease; }
+    .delete-btn:hover { transform: scale(1.2) rotate(-10deg); }
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 900; display: flex; align-items: center; justify-content: center; animation: fadeIn 0.2s ease-out; }
+    .modal-content { background: white; border-radius: 16px; padding: 32px; width: 420px; max-width: 90vw; box-shadow: 0 20px 60px rgba(0,0,0,0.2); animation: scaleIn 0.25s ease-out; }
+    .status-dot { animation: pulse 2s infinite; }
+    .token-btn:focus { outline: 2px solid #3b82f6; outline-offset: 2px; }
+    .pill-switch { position: relative; display: inline-flex; width: 52px; height: 28px; }
+    .pill-switch input { opacity: 0; width: 0; height: 0; }
+    .pill-slider { position: absolute; inset: 0; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 9999px; cursor: pointer; }
+    .pill-slider:before { content: ""; position: absolute; width: 22px; height: 22px; left: 3px; top: 3px; background: white; border-radius: 9999px; box-shadow: 0 1px 2px rgba(0,0,0,0.15); transition: transform 0.2s ease; }
+    .pill-switch input:checked + .pill-slider { background: #22c55e; border-color: #22c55e; }
+    .pill-switch input:checked + .pill-slider:before { transform: translateX(24px); }
+    .pill-switch input:focus + .pill-slider { box-shadow: 0 0 0 4px rgba(59,130,246,0.15); }
+  </style>
+</head>
+<body class="bg-white text-text min-h-screen">
+  <div id="app" class="flex min-h-screen">
+    <aside class="w-64 bg-white border-r border-border flex flex-col">
+      <div class="p-6 border-b border-border">
+        <h1 class="text-xl font-bold text-text flex items-center gap-2">
+          <a href="https://github.com/inkdust2021/VibeGuard" target="_blank" rel="noopener noreferrer" class="github-logo flex items-center gap-2 hover:text-accent" title="GitHub">
+            <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+            </svg>
+          </a>
+          VibeGuard
+        </h1>
+        <p class="text-sm text-muted mt-1" data-i18n="subtitle">隐私代理管理</p>
+      </div>
+      <nav class="flex-1 p-4">
+        <a href="#/" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-text mb-1" data-page="dashboard">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+          <span data-i18n="nav.dashboard">仪表盘</span>
+        </a>
+        <a href="#/audit" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-text mb-1" data-page="audit">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11c1.657 0 3-1.343 3-3S13.657 5 12 5 9 6.343 9 8s1.343 3 3 3zm0 0c-3.314 0-6 1.79-6 4v2h12v-2c0-2.21-2.686-4-6-4z"/></svg>
+          <span data-i18n="nav.audit">拦截记录</span>
+        </a>
+        <a href="#/patterns" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-text mb-1" data-page="patterns">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg>
+          <span data-i18n="nav.patterns">匹配规则</span>
+        </a>
+        <a href="#/sessions" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-text mb-1" data-page="sessions">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/></svg>
+          <span data-i18n="nav.sessions">会话映射</span>
+        </a>
+        <a href="#/certs" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-text" data-page="certs">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+          <span data-i18n="nav.certs">证书管理</span>
+        </a>
+        <a href="#/logs" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-text" data-page="logs">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6M7 7h10a2 2 0 012 2v10a2 2 0 01-2 2H7a2 2 0 01-2-2V9a2 2 0 012-2z"/></svg>
+          <span data-i18n="nav.logs">调试日志</span>
+        </a>
+      </nav>
+      <div class="p-4 border-t border-border">
+        <div class="flex justify-between items-center mb-2">
+          <div class="text-xs text-muted">
+            <div class="flex items-center gap-2 mb-1"><span class="w-2 h-2 bg-success rounded-full"></span><span data-i18n="status.running">运行中</span></div>
+            <span id="proxy-address">127.0.0.1:28657</span>
+          </div>
+          <div class="flex gap-1">
+            <span class="lang-switch active" data-lang="zh" onclick="setLang('zh')">中</span>
+            <span class="lang-switch" data-lang="en" onclick="setLang('en')">EN</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+    <main class="flex-1 p-8 bg-surface/50" id="main-content"></main>
+  </div>
+  <script>
+// i18n translations
+const i18n = {
+  zh: {
+    'app.title': 'VibeGuard 管理面板',
+    subtitle: '隐私代理管理',
+    'nav.dashboard': '仪表盘',
+    'nav.audit': '拦截记录',
+    'nav.patterns': '匹配规则',
+    'nav.sessions': '会话映射',
+    'nav.certs': '证书管理',
+    'nav.logs': '调试日志',
+    'status.running': '运行中',
+    'dashboard.title': '仪表盘',
+    'dashboard.subtitle': '实时代理统计',
+    'dashboard.activeMappings': '活跃映射',
+    'dashboard.totalRequests': '总请求数',
+    'dashboard.redacted': '已脱敏',
+    'dashboard.restored': '已还原',
+    'dashboard.proxyStatus': '代理状态',
+    'dashboard.status': '状态',
+    'dashboard.listenAddress': '监听地址',
+    'dashboard.uptime': '运行时间',
+    'dashboard.sessionInfo': '会话信息',
+    'dashboard.ttl': '有效期',
+    'dashboard.maxMappings': '最大映射数',
+    'dashboard.utilization': '使用率',
+    'patterns.title': '匹配规则',
+    'patterns.subtitle': '只对“关键词本身”做替换（不支持正则/模板）',
+    'patterns.regex': '关键词',
+    'patterns.add': '添加',
+    'patterns.noRegex': '未配置关键词',
+    'patterns.loading': '加载中...',
+    'patterns.addRuleTitle': '添加关键词',
+    'patterns.cancel': '取消',
+    'patterns.confirm': '确认添加',
+    'patterns.valueRequired': '请填写必填项',
+    'patterns.keyword.value': '关键词',
+    'patterns.keyword.placeholder': '输入需要替换的关键词（如姓名、公司名等）',
+    'patterns.keyword.category': '分类（可选）',
+    'patterns.keyword.categoryPlaceholder': '如 NAME / EMAIL / TEXT（默认 TEXT）',
+    'patterns.ruleType': '规则类型',
+    'patterns.ruleType.format': '格式匹配',
+    'patterns.ruleType.contains': '包含指定文本',
+    'patterns.ruleType.affix': '前后缀匹配',
+    'patterns.ruleType.advanced': '高级模式',
+    'patterns.ruleType.presets': '常用模板',
+    'patterns.presets.title': '常用模板',
+    'patterns.presets.subtitle': '选择一个常见敏感信息模板，无需写正则',
+    'patterns.presets.selectRequired': '请选择一个模板',
+    'patterns.format.maskVars': '掩码字符（点击插入）',
+    'patterns.format.vars': '变量写法（点击插入）',
+    'patterns.format.input': '格式模板',
+    'patterns.format.inputPlaceholder': '如 ###-####-#### 或 {d{3}}-{d{4}}-{d{4}} 匹配手机号',
+    'patterns.format.preview': '生成正则',
+    'patterns.format.invalid': '格式无效',
+    'patterns.format.example': '示例：########### 匹配11位数字；###-####-#### 匹配带分隔符手机号；{d{11}} 为变量写法',
+    'patterns.contains.text': '包含的文本',
+    'patterns.contains.placeholder': '输入需要匹配的文本，如姓名、公司名等',
+    'patterns.affix.prefix': '前缀',
+    'patterns.affix.suffix': '后缀',
+    'patterns.affix.prefixPlaceholder': '如 userId:',
+    'patterns.affix.suffixPlaceholder': '如 @company.com',
+    'patterns.affix.hint': '默认仅匹配“连续非空白字符”，并只替换中间值（更安全）。如需匹配含空格/跨行内容，请用「高级模式」。',
+    'patterns.advanced.regex': '正则表达式',
+    'patterns.advanced.placeholder': '输入正则表达式',
+    'patterns.deleteConfirm': '确定删除此规则？',
+    'patterns.deleted': '规则已删除',
+    'patterns.added': '规则已添加',
+    'patterns.deleteFailed': '删除失败',
+    'patterns.addFailed': '添加失败',
+    'sessions.title': '会话映射',
+    'sessions.subtitle': '活跃的占位符映射',
+    'sessions.clearAll': '清空全部',
+    'sessions.search': '搜索占位符或分类...',
+    'sessions.placeholder': '占位符',
+    'sessions.category': '分类',
+    'sessions.status': '状态',
+    'sessions.protected': '已保护',
+    'sessions.noMappings': '暂无活跃映射',
+    'sessions.clearConfirm': '确定清空所有会话映射？这可能导致进行中的 AI 对话还原失败。',
+    'sessions.cleared': '会话已清空',
+    'sessions.clearFailed': '清空失败',
+    'certs.title': '证书管理',
+    'certs.subtitle': 'CA 证书管理',
+    'certs.caCert': 'CA 证书',
+    'certs.subject': '主题',
+    'certs.validFrom': '生效时间',
+    'certs.validUntil': '过期时间',
+    'certs.fingerprint': 'SHA-256 指纹',
+    'certs.trusted': '已信任',
+    'certs.yes': '是',
+    'certs.no': '否',
+    'certs.certPath': '证书路径',
+    'certs.actions': '操作',
+    'certs.installTrust': '安装到用户信任库',
+    'certs.trustHint': '如需安装到系统信任库（sudo，推荐用于 Codex/CLI），请在终端运行：vibeguard trust --mode system',
+    'certs.regenerate': '重新生成 CA',
+    'certs.regenerateNote': '注意：重新生成 CA 将使所有现有证书失效，需要重新信任。',
+    'certs.trustedSuccess': 'CA 证书已安装到用户信任库！',
+    'certs.regenerateConfirm': '确定重新生成 CA 证书？',
+    'certs.regenerated': 'CA 证书已重新生成！',
+    'certs.failed': '操作失败：',
+    'logs.title': '调试日志',
+    'logs.subtitle': '查看后端运行日志（用于排查连接、证书、SSE 等问题）',
+    'logs.configuredPath': '配置路径',
+    'logs.effectivePath': '实际读取',
+    'logs.exists': '文件存在',
+    'logs.missing': '文件不存在',
+    'logs.warning': '提示',
+    'logs.tail': '尾行',
+    'logs.follow': '实时跟随',
+    'logs.refresh': '刷新',
+    'logs.copy': '复制',
+    'logs.copied': '已复制',
+    'logs.copyFailed': '复制失败',
+    'logs.search': '搜索日志...',
+    'logs.autoscroll': '自动滚动到底部',
+    'logs.empty': '暂无日志（可尝试把 log.level 设为 debug 并重启 vibeguard）',
+    'logs.connecting': '连接中...',
+    'logs.reconnecting': '断开，正在重连...',
+    'audit.title': '拦截记录',
+    'audit.subtitle': '每次请求是否命中脱敏规则，以及命中的内容（默认仅显示预览）',
+    'audit.clear': '清空',
+    'audit.search': '搜索 host/path/分类/内容...',
+    'audit.privacyOn': '隐私模式：开启（不显示原文）',
+    'audit.privacyOff': '隐私模式：关闭（显示原文，注意风险）',
+    'audit.privacyHint': '可在此处切换。提示：切换仅影响之后的新记录；为安全起见建议保持开启。',
+    'audit.privacyConfirmOff': '确定关闭隐私模式并显示原文？这可能在管理页暴露敏感信息。',
+    'audit.privacyUpdated': '隐私模式已更新',
+    'audit.privacyUpdateFailed': '更新失败',
+    'audit.empty': '暂无记录（用 Codex 发起一次请求试试）',
+    'audit.hit': '命中',
+    'audit.nohit': '未命中',
+    'audit.skipped': '未扫描',
+    'audit.note.no_body': '无请求体',
+    'audit.note.not_text': '非文本内容',
+    'audit.note.too_large': '请求体过大',
+    'audit.note.read_error': '读取失败',
+    'audit.note.pass_through': '未拦截（配置直通）',
+    'audit.note.encoded': '请求体已压缩（跳过脱敏）',
+    'audit.note.decode_error': '解压失败（跳过脱敏）',
+    'audit.note.invalid_json': '脱敏后 JSON 无效（已放弃脱敏）',
+    'audit.note.not_utf8': '非 UTF-8 文本（跳过脱敏）',
+    'audit.clearConfirm': '确定清空拦截记录？',
+    'audit.cleared': '拦截记录已清空',
+    'audit.clearFailed': '清空失败',
+    'audit.metaLen': '长度',
+    'audit.metaTrunc': '已截断',
+    'audit.detail.title': '请求详情',
+    'audit.detail.close': '关闭',
+    'audit.detail.request': '请求',
+    'audit.detail.contentType': 'Content-Type',
+    'audit.detail.responseStatus': '响应状态',
+    'audit.detail.responseType': '响应 Content-Type',
+    'audit.detail.restoreApplied': '响应还原',
+    'audit.detail.note': '说明',
+    'audit.detail.matches': '命中内容',
+    'audit.detail.noMatches': '无命中内容',
+    'audit.detail.placeholder': '占位符',
+    'audit.detail.value': '命中值',
+    'audit.detail.preview': '预览',
+    'audit.detail.original': '原文',
+    'audit.detail.notFound': '未找到该记录（可能已被清理）',
+    'audit.autoscroll': '自动滚动到底部',
+    'audit.connecting': '正在连接...',
+    'audit.reconnecting': '连接断开，正在重连...'
+  },
+  en: {
+    'app.title': 'VibeGuard Admin Panel',
+    subtitle: 'Privacy Proxy Admin',
+    'nav.dashboard': 'Dashboard',
+    'nav.audit': 'Audit',
+    'nav.patterns': 'Patterns',
+    'nav.sessions': 'Sessions',
+    'nav.certs': 'Certificates',
+    'nav.logs': 'Debug Logs',
+    'status.running': 'Running',
+    'dashboard.title': 'Dashboard',
+    'dashboard.subtitle': 'Real-time proxy statistics',
+    'dashboard.activeMappings': 'Active Mappings',
+    'dashboard.totalRequests': 'Total Requests',
+    'dashboard.redacted': 'Redacted',
+    'dashboard.restored': 'Restored',
+    'dashboard.proxyStatus': 'Proxy Status',
+    'dashboard.status': 'Status',
+    'dashboard.listenAddress': 'Listen Address',
+    'dashboard.uptime': 'Uptime',
+    'dashboard.sessionInfo': 'Session Info',
+    'dashboard.ttl': 'TTL',
+    'dashboard.maxMappings': 'Max Mappings',
+    'dashboard.utilization': 'Utilization',
+    'patterns.title': 'Patterns',
+    'patterns.subtitle': 'Replace only the keyword itself (no regex/presets)',
+    'patterns.regex': 'Keywords',
+    'patterns.add': '+ Add',
+    'patterns.noRegex': 'No keywords configured',
+    'patterns.loading': 'Loading...',
+    'patterns.addRuleTitle': 'Add Keyword',
+    'patterns.cancel': 'Cancel',
+    'patterns.confirm': 'Add',
+    'patterns.valueRequired': 'Please fill in required fields',
+    'patterns.keyword.value': 'Keyword',
+    'patterns.keyword.placeholder': 'Enter a keyword to redact (name, company, etc.)',
+    'patterns.keyword.category': 'Category (optional)',
+    'patterns.keyword.categoryPlaceholder': 'e.g., NAME / EMAIL / TEXT (default: TEXT)',
+    'patterns.ruleType': 'Rule Type',
+    'patterns.ruleType.format': 'Format Match',
+    'patterns.ruleType.contains': 'Contains Text',
+    'patterns.ruleType.affix': 'Prefix/Suffix',
+    'patterns.ruleType.advanced': 'Advanced (Regex)',
+    'patterns.ruleType.presets': 'Presets',
+    'patterns.presets.title': 'Presets',
+    'patterns.presets.subtitle': 'Pick a common pattern without writing regex',
+    'patterns.presets.selectRequired': 'Please select a preset',
+    'patterns.format.maskVars': 'Mask tokens (click to insert)',
+    'patterns.format.vars': 'Legacy vars (click to insert)',
+    'patterns.format.input': 'Format Template',
+    'patterns.format.inputPlaceholder': 'e.g. ###-####-#### or {d{3}}-{d{4}}-{d{4}} for phone',
+    'patterns.format.preview': 'Generated regex',
+    'patterns.format.invalid': 'Invalid format',
+    'patterns.format.example': 'Examples: ########### for 11 digits; ###-####-#### for phone; legacy vars like {d{11}} also work',
+    'patterns.contains.text': 'Text to match',
+    'patterns.contains.placeholder': 'Text to redact, e.g., name, company',
+    'patterns.affix.prefix': 'Prefix',
+    'patterns.affix.suffix': 'Suffix',
+    'patterns.affix.prefixPlaceholder': 'e.g., userId:',
+    'patterns.affix.suffixPlaceholder': 'e.g., @company.com',
+    'patterns.affix.hint': 'By default, it matches only a contiguous non-whitespace token and redacts only the middle value (safer). For spaces/multi-line, use “Advanced”.',
+    'patterns.advanced.regex': 'Regex Pattern',
+    'patterns.advanced.placeholder': 'Enter regex pattern',
+    'patterns.deleteConfirm': 'Delete this pattern?',
+    'patterns.deleted': 'Pattern deleted',
+    'patterns.added': 'Pattern added',
+    'patterns.deleteFailed': 'Failed to delete pattern',
+    'patterns.addFailed': 'Failed to add pattern',
+    'sessions.title': 'Sessions',
+    'sessions.subtitle': 'Active placeholder mappings',
+    'sessions.clearAll': 'Clear All',
+    'sessions.search': 'Search placeholders or categories...',
+    'sessions.placeholder': 'Placeholder',
+    'sessions.category': 'Category',
+    'sessions.status': 'Status',
+    'sessions.protected': 'Protected',
+    'sessions.noMappings': 'No active mappings',
+    'sessions.clearConfirm': 'Clear all session mappings? This may break ongoing AI conversations.',
+    'sessions.cleared': 'Sessions cleared',
+    'sessions.clearFailed': 'Failed to clear sessions',
+    'certs.title': 'Certificates',
+    'certs.subtitle': 'CA certificate management',
+    'certs.caCert': 'CA Certificate',
+    'certs.subject': 'Subject',
+    'certs.validFrom': 'Valid From',
+    'certs.validUntil': 'Valid Until',
+    'certs.fingerprint': 'SHA-256 Fingerprint',
+    'certs.trusted': 'Trusted',
+    'certs.yes': 'Yes',
+    'certs.no': 'No',
+    'certs.certPath': 'Certificate Path',
+    'certs.actions': 'Actions',
+    'certs.installTrust': 'Install to User Trust Store',
+    'certs.trustHint': 'To install into the system trust store (sudo, recommended for Codex/CLI), run: vibeguard trust --mode system',
+    'certs.regenerate': 'Regenerate CA',
+    'certs.regenerateNote': 'Note: Regenerating the CA will invalidate all existing certificates.',
+    'certs.trustedSuccess': 'CA certificate installed to user trust store!',
+    'certs.regenerateConfirm': 'Regenerate CA certificate?',
+    'certs.regenerated': 'CA certificate regenerated!',
+    'certs.failed': 'Failed: ',
+    'logs.title': 'Debug Logs',
+    'logs.subtitle': 'View backend logs for troubleshooting (TLS, SSE, connectivity, etc.)',
+    'logs.configuredPath': 'Configured path',
+    'logs.effectivePath': 'Reading from',
+    'logs.exists': 'File exists',
+    'logs.missing': 'File missing',
+    'logs.warning': 'Note',
+    'logs.tail': 'Tail',
+    'logs.follow': 'Follow',
+    'logs.refresh': 'Refresh',
+    'logs.copy': 'Copy',
+    'logs.copied': 'Copied',
+    'logs.copyFailed': 'Copy failed',
+    'logs.search': 'Search logs...',
+    'logs.autoscroll': 'Auto-scroll to bottom',
+    'logs.empty': 'No logs yet (try setting log.level=debug and restart vibeguard)',
+    'logs.connecting': 'Connecting...',
+    'logs.reconnecting': 'Disconnected, reconnecting...',
+    'audit.title': 'Audit',
+    'audit.subtitle': 'Per-request redaction hits and matched content (preview by default)',
+    'audit.clear': 'Clear',
+    'audit.search': 'Search host/path/category/content...',
+    'audit.privacyOn': 'Privacy mode: ON (no originals)',
+    'audit.privacyOff': 'Privacy mode: OFF (shows originals)',
+    'audit.privacyHint': 'Toggle here. Note: it only affects new records; keep ON for safety.',
+    'audit.privacyConfirmOff': 'Turn OFF privacy mode and show originals? This may expose sensitive data in the admin UI.',
+    'audit.privacyUpdated': 'Privacy mode updated',
+    'audit.privacyUpdateFailed': 'Update failed',
+    'audit.empty': 'No records yet (try a request via Codex)',
+    'audit.hit': 'Hit',
+    'audit.nohit': 'No hit',
+    'audit.skipped': 'Skipped',
+    'audit.note.no_body': 'No body',
+    'audit.note.not_text': 'Not text',
+    'audit.note.too_large': 'Body too large',
+    'audit.note.read_error': 'Read error',
+    'audit.note.pass_through': 'Pass-through (not intercepted)',
+    'audit.note.encoded': 'Encoded body (skip redaction)',
+    'audit.note.decode_error': 'Decode error (skip redaction)',
+    'audit.note.invalid_json': 'Invalid JSON after redaction (skipped)',
+    'audit.note.not_utf8': 'Not UTF-8 (skip redaction)',
+    'audit.clearConfirm': 'Clear audit records?',
+    'audit.cleared': 'Audit records cleared',
+    'audit.clearFailed': 'Failed to clear',
+    'audit.metaLen': 'len',
+    'audit.metaTrunc': 'truncated',
+    'audit.detail.title': 'Request details',
+    'audit.detail.close': 'Close',
+    'audit.detail.request': 'Request',
+    'audit.detail.contentType': 'Content-Type',
+    'audit.detail.responseStatus': 'Response status',
+    'audit.detail.responseType': 'Response Content-Type',
+    'audit.detail.restoreApplied': 'Restore applied',
+    'audit.detail.note': 'Note',
+    'audit.detail.matches': 'Matches',
+    'audit.detail.noMatches': 'No matches',
+    'audit.detail.placeholder': 'Placeholder',
+    'audit.detail.value': 'Value',
+    'audit.detail.preview': 'Preview',
+    'audit.detail.original': 'Original',
+    'audit.detail.notFound': 'Record not found (may have been cleared)',
+    'audit.autoscroll': 'Auto-scroll to bottom',
+    'audit.connecting': 'Connecting...',
+    'audit.reconnecting': 'Disconnected, reconnecting...'
+  }
+};
+
+let currentLang = 'zh';
+
+function t(key) {
+  return i18n[currentLang][key] || key;
+}
+
+const LANG_STORAGE_KEY = 'vibeguard.lang';
+const LANG_SOURCE_KEY = 'vibeguard.lang.source'; // auto|manual
+
+function normalizeLang(lang) {
+  if (!lang) return '';
+  return lang === 'en' ? 'en' : 'zh';
+}
+
+function applyLang(lang) {
+  currentLang = normalizeLang(lang) || 'zh';
+  document.documentElement.lang = currentLang === 'zh' ? 'zh-CN' : 'en';
+  document.title = t('app.title');
+
+  document.querySelectorAll('.lang-switch').forEach(el => {
+    const target = el.dataset.lang || '';
+    el.classList.toggle('active', target === currentLang);
+  });
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    if (i18n[currentLang][key]) {
+      el.textContent = i18n[currentLang][key];
+    }
+  });
+}
+
+function setLang(lang) {
+  applyLang(lang);
+  try {
+    localStorage.setItem(LANG_STORAGE_KEY, currentLang);
+    localStorage.setItem(LANG_SOURCE_KEY, 'manual');
+  } catch (e) { /* ignore */ }
+  // Re-render current page
+  route();
+}
+
+async function initLang() {
+  let saved = '', source = '';
+  try {
+    saved = localStorage.getItem(LANG_STORAGE_KEY) || '';
+    source = localStorage.getItem(LANG_SOURCE_KEY) || '';
+  } catch (e) { /* ignore */ }
+
+  saved = normalizeLang(saved);
+  // 兼容旧版本：此前只有 vibeguard.lang，没有 source 字段。这里将其视为“手动选择”。
+  if (saved && (source === 'manual' || source === '')) {
+    applyLang(saved);
+    if (source === '') {
+      try { localStorage.setItem(LANG_SOURCE_KEY, 'manual'); } catch (e) { /* ignore */ }
+    }
+    return;
+  }
+
+  try {
+    const r = await fetch('/manager/api/settings', { cache: 'no-store' });
+    if (r.ok) {
+      const j = await r.json();
+      const serverLang = normalizeLang(j?.lang || '');
+      const lang = serverLang || saved || 'zh';
+      applyLang(lang);
+      try {
+        localStorage.setItem(LANG_STORAGE_KEY, lang);
+        localStorage.setItem(LANG_SOURCE_KEY, source || 'auto');
+      } catch (e) { /* ignore */ }
+      return;
+    }
+  } catch (e) { /* ignore */ }
+
+  applyLang(saved || 'zh');
+}
+
+const state = { stats: { proxy: {}, session: {}, requests: {} }, patterns: { keywords: [], regex: [], builtin: [], exclude: [] }, sessions: { total: 0, mappings: [] }, certs: { ca: {} }, audit: { redact_log: true, max_events: 200, events: [] }, logs: { configured_path: '', effective_path: '', exists: false, lines: [], warning: '' } };
+let auditES = null;
+let logsES = null;
+async function throwHttpError(r) {
+  let detail = '';
+  try { detail = (await r.text()).trim(); } catch (e) { /* ignore */ }
+  throw new Error(detail ? ('HTTP ' + r.status + ': ' + detail) : ('HTTP ' + r.status));
+}
+const api = {
+  async get(p) { const r = await fetch('/manager/api' + p, { cache: 'no-store' }); if (!r.ok) await throwHttpError(r); return r.json(); },
+  async post(p, b) { const r = await fetch('/manager/api' + p, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }); if (!r.ok) await throwHttpError(r); return r.json(); },
+  async del(p) { const r = await fetch('/manager/api' + p, { method: 'DELETE' }); if (!r.ok) await throwHttpError(r); return r; }
+};
+function toast(m, type = 'success') { const e = document.createElement('div'); e.className = 'toast toast-' + type + ' fade-in'; e.textContent = m; document.body.appendChild(e); setTimeout(() => e.remove(), 3000); }
+function esc(t) { const d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+function sanitizeInputText(s) {
+  // 清理不可见字符（控制字符/零宽字符/BOM），避免规则“看起来一样但实际匹配不到”
+  return (s || '')
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .replace(/[\u200B\u200C\u200D\u2060\uFEFF]/g, '')
+    .trim();
+}
+function sanitizeCategoryInput(s) {
+  const v = sanitizeInputText(s).toUpperCase();
+  return v
+    .replace(/[^A-Z0-9_\-\s]/g, '')
+    .replace(/[\s\-]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+function normalizePatterns(p) {
+  const raw = p || {};
+  const rawRegex = raw.regex ?? raw.Regex ?? [];
+  const rawKeywords = raw.keywords ?? raw.Keywords ?? [];
+  const rawBuiltin = raw.builtin ?? raw.Builtin ?? [];
+  const rawExclude = raw.exclude ?? raw.Exclude ?? [];
+
+  const regex = Array.isArray(rawRegex)
+    ? rawRegex.map(r => ({ pattern: r?.pattern ?? r?.Pattern ?? '', category: r?.category ?? r?.Category ?? '' })).filter(r => r.pattern !== '')
+    : [];
+
+  const keywords = Array.isArray(rawKeywords)
+    ? rawKeywords.map(k => ({ value: k?.value ?? k?.Value ?? '', category: k?.category ?? k?.Category ?? '' })).filter(k => k.value !== '')
+    : [];
+
+  const builtin = Array.isArray(rawBuiltin) ? rawBuiltin : [];
+  const exclude = Array.isArray(rawExclude) ? rawExclude : [];
+
+  return { keywords, regex, builtin, exclude };
+}
+
+function route() {
+  const h = window.location.hash || '#/', p = h.slice(2) || 'dashboard';
+  document.querySelectorAll('.nav-item').forEach(e => { e.classList.remove('active'); if (e.dataset.page === p || (p === '' && e.dataset.page === 'dashboard')) e.classList.add('active'); });
+  const c = document.getElementById('main-content'); c.classList.add('fade-in');
+  if (p !== 'audit') stopAuditStream();
+  if (p !== 'logs') stopLogsStream();
+  if (p === '' || p === 'dashboard') renderDashboard();
+  else if (p === 'audit') renderAudit();
+  else if (p === 'patterns') renderPatterns();
+  else if (p === 'sessions') renderSessions();
+  else if (p === 'certs') renderCerts();
+  else if (p === 'logs') renderLogs();
+  else c.innerHTML = '<div class="text-center py-20 text-muted">Page not found</div>';
+}
+
+async function renderDashboard() {
+  document.getElementById('main-content').innerHTML = '<div class="mb-8"><h2 class="text-2xl font-bold text-text">' + t('dashboard.title') + '</h2><p class="text-muted mt-1">' + t('dashboard.subtitle') + '</p></div><div class="grid grid-cols-4 gap-6 mb-8"><div class="card p-6"><div class="stat-value" id="stat-mappings">-</div><div class="stat-label">' + t('dashboard.activeMappings') + '</div></div><div class="card p-6"><div class="stat-value" id="stat-total">-</div><div class="stat-label">' + t('dashboard.totalRequests') + '</div></div><div class="card p-6"><div class="stat-value text-accent" id="stat-redacted">-</div><div class="stat-label">' + t('dashboard.redacted') + '</div></div><div class="card p-6"><div class="stat-value text-success" id="stat-restored">-</div><div class="stat-label">' + t('dashboard.restored') + '</div></div></div><div class="grid grid-cols-2 gap-6"><div class="card p-6"><h3 class="font-semibold text-text mb-4">' + t('dashboard.proxyStatus') + '</h3><div class="space-y-3"><div class="flex justify-between"><span class="text-muted">' + t('dashboard.status') + '</span><span class="tag tag-green">' + t('status.running') + '</span></div><div class="flex justify-between"><span class="text-muted">' + t('dashboard.listenAddress') + '</span><span class="font-mono text-sm" id="stat-address">-</span></div><div class="flex justify-between"><span class="text-muted">' + t('dashboard.uptime') + '</span><span id="stat-uptime">-</span></div></div></div><div class="card p-6"><h3 class="font-semibold text-text mb-4">' + t('dashboard.sessionInfo') + '</h3><div class="space-y-3"><div class="flex justify-between"><span class="text-muted">' + t('dashboard.ttl') + '</span><span id="stat-ttl">-</span></div><div class="flex justify-between"><span class="text-muted">' + t('dashboard.maxMappings') + '</span><span id="stat-max">-</span></div><div class="flex justify-between"><span class="text-muted">' + t('dashboard.utilization') + '</span><span id="stat-util">-</span></div></div></div></div>';
+  await loadStats(); startStatsStream();
+}
+
+async function loadStats() { try { state.stats = await api.get('/stats'); updateStatsUI(); } catch (e) { console.error(e); } }
+function updateStatsUI() {
+  const s = state.stats;
+  document.getElementById('stat-mappings').textContent = s.session?.active_mappings ?? 0;
+  document.getElementById('stat-total').textContent = s.requests?.total ?? 0;
+  document.getElementById('stat-redacted').textContent = s.requests?.redacted ?? 0;
+  document.getElementById('stat-restored').textContent = s.requests?.restored ?? 0;
+  document.getElementById('stat-address').textContent = s.proxy?.listen_address ?? '-';
+  document.getElementById('stat-uptime').textContent = fmtUptime(s.proxy?.uptime_seconds ?? 0);
+  document.getElementById('stat-ttl').textContent = fmtDur(s.session?.ttl_seconds ?? 0);
+  document.getElementById('stat-max').textContent = (s.session?.max_mappings ?? 0).toLocaleString();
+  document.getElementById('proxy-address').textContent = s.proxy?.listen_address ?? '-';
+  document.getElementById('stat-util').textContent = s.session?.max_mappings > 0 ? ((s.session?.active_mappings / s.session.max_mappings) * 100).toFixed(1) + '%' : '0%';
+}
+function startStatsStream() { const es = new EventSource('/manager/api/stats/stream'); es.addEventListener('stats', e => { state.stats = JSON.parse(e.data); updateStatsUI(); }); es.onerror = () => setTimeout(startStatsStream, 5000); }
+function fmtUptime(s) { if (s < 60) return s + 's'; if (s < 3600) return Math.floor(s / 60) + 'm ' + (s % 60) + 's'; return Math.floor(s / 3600) + 'h ' + Math.floor((s % 3600) / 60) + 'm'; }
+function fmtDur(s) { if (s < 60) return s + 's'; if (s < 3600) return Math.floor(s / 60) + (currentLang === 'zh' ? ' 分钟' : ' minutes'); return Math.floor(s / 3600) + (currentLang === 'zh' ? ' 小时' : ' hours'); }
+
+async function renderAudit() {
+  document.getElementById('main-content').innerHTML =
+    '<div class="mb-8 flex justify-between items-start gap-4">' +
+      '<div><h2 class="text-2xl font-bold text-text">' + t('audit.title') + '</h2><p class="text-muted mt-1">' + t('audit.subtitle') + '</p></div>' +
+      '<button class="btn btn-danger" onclick="clearAudit()">' + t('audit.clear') + '</button>' +
+    '</div>' +
+    '<div class="card p-6 mb-6">' +
+      '<div class="flex justify-between items-start gap-6">' +
+        '<div>' +
+          '<div class="flex items-center gap-3">' +
+            '<div id="audit-privacy" class="tag tag-yellow inline-flex"></div>' +
+            '<label class="pill-switch" title="' + esc(t('audit.privacyHint')) + '">' +
+              '<input type="checkbox" id="audit-privacy-toggle" onchange="toggleAuditPrivacy(this.checked)">' +
+              '<span class="pill-slider"></span>' +
+            '</label>' +
+          '</div>' +
+          '<div class="text-xs text-muted mt-2">' + t('audit.privacyHint') + '</div>' +
+        '</div>' +
+        '<div class="text-xs text-muted" id="audit-status"></div>' +
+      '</div>' +
+    '</div>' +
+      '<div class="card p-6">' +
+      '<div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">' +
+        '<input type="text" id="audit-search" placeholder="' + t('audit.search') + '" class="w-full md:w-[55%]" oninput="renderAuditList()">' +
+        '<label class="text-sm text-muted flex items-center gap-2"><input type="checkbox" id="audit-autoscroll" checked onchange="renderAuditList()">' + t('audit.autoscroll') + '</label>' +
+      '</div>' +
+      '<div id="audit-box" class="space-y-3 overflow-auto" style="height: 60vh;"></div>' +
+      '<div class="text-xs text-muted mt-3" id="audit-empty"></div>' +
+    '</div>';
+
+  state.audit.events = [];
+  renderAuditMeta();
+  renderAuditList();
+  startAuditStream();
+}
+
+function renderAuditMeta() {
+  const el = document.getElementById('audit-privacy');
+  const toggle = document.getElementById('audit-privacy-toggle');
+  if (!el) return;
+  const on = !!state.audit.redact_log;
+  el.textContent = on ? t('audit.privacyOn') : t('audit.privacyOff');
+  el.className = 'tag ' + (on ? 'tag-yellow' : 'tag-red') + ' inline-flex';
+  if (toggle) toggle.checked = on;
+}
+
+let auditPrivacyBusy = false;
+async function toggleAuditPrivacy(on) {
+  if (auditPrivacyBusy) return;
+  const prev = !!state.audit.redact_log;
+  const next = !!on;
+  if (!next && prev) {
+    if (!confirm(t('audit.privacyConfirmOff'))) {
+      renderAuditMeta();
+      return;
+    }
+  }
+
+  auditPrivacyBusy = true;
+  try {
+    const resp = await api.post('/audit/privacy', { redact_log: next });
+    state.audit.redact_log = !!(resp?.redact_log ?? next);
+    renderAuditMeta();
+    renderAuditList();
+    toast(t('audit.privacyUpdated'));
+  } catch (e) {
+    state.audit.redact_log = prev;
+    renderAuditMeta();
+    toast(t('audit.privacyUpdateFailed') + ': ' + e.message, 'error');
+  } finally {
+    auditPrivacyBusy = false;
+  }
+}
+
+function previewValue(s, head = 2, tail = 2) {
+  const r = Array.from(String(s || ''));
+  const n = r.length;
+  if (n === 0) return '';
+  if (n <= 4) return '*'.repeat(n);
+  if (head <= 0) head = 1;
+  if (tail <= 0) tail = 1;
+  if (head + tail >= n) return '*'.repeat(n);
+  return r.slice(0, head).join('') + '…' + r.slice(n - tail).join('');
+}
+
+function auditDisplayMatchValue(m) {
+  const val = String(m?.value || '');
+  // 隐私模式开启：无论记录当时是否为原文，都只展示预览
+  if (!!state.audit.redact_log) return previewValue(val, 2, 2);
+  // 隐私模式关闭：尽量展示原文；若该条记录本身是预览，则只能展示预览
+  return val;
+}
+
+function auditNoteText(note) {
+  if (!note) return '';
+  const key = 'audit.note.' + note;
+  const v = t(key);
+  return v === key ? note : v;
+}
+
+function fmtTime(ts) {
+  if (!ts) return '';
+  try {
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return '' + ts;
+    return d.toLocaleString();
+  } catch (e) {
+    return '' + ts;
+  }
+}
+
+function renderAuditList() {
+  const box = document.getElementById('audit-box');
+  const empty = document.getElementById('audit-empty');
+  if (!box || !empty) return;
+
+  const qEl = document.getElementById('audit-search');
+  const q = (qEl ? qEl.value : '').trim().toLowerCase();
+  const events = state.audit.events || [];
+
+  const filtered = q ? events.filter(ev => {
+    const hay = [
+      ev.host || '',
+      ev.path || '',
+      ev.method || '',
+      ev.content_type || '',
+      (ev.note || ''),
+      (ev.matches || []).map(m => (m.category || '') + ' ' + auditDisplayMatchValue(m)).join(' ')
+    ].join(' ').toLowerCase();
+    return hay.includes(q);
+  }) : events;
+
+  if (filtered.length === 0) {
+    box.innerHTML = '';
+    empty.textContent = t('audit.empty');
+    return;
+  }
+
+  empty.textContent = '';
+  // 性能保护：最多渲染最后 200 条
+  const max = 200;
+  const list = filtered.length > max ? filtered.slice(filtered.length - max) : filtered;
+
+  box.innerHTML = list.map(ev => {
+    const hit = (ev.redacted_count || 0) > 0;
+    const attempted = !!ev.attempted;
+    const tag = hit ? ('<span class="tag tag-green">' + t('audit.hit') + ' ' + esc(String(ev.redacted_count || 0)) + '</span>')
+      : attempted ? ('<span class="tag tag-yellow">' + t('audit.nohit') + '</span>')
+      : ('<span class="tag tag-red">' + t('audit.skipped') + '</span>');
+
+    const note = auditNoteText(ev.note);
+    const noteHtml = note ? ('<div class="text-xs text-muted mt-2">' + esc(note) + '</div>') : '';
+
+    const id = Number(ev.id || 0);
+    const matches = Array.isArray(ev.matches) ? ev.matches : [];
+    const matchesHtml = matches.length === 0 ? '' : (
+      '<div class="mt-3 flex flex-wrap gap-2">' +
+        matches.map(m => {
+          const title = m.placeholder ? (' title="' + esc(m.placeholder) + '"') : '';
+          const cat = '<span class="tag tag-blue">' + esc(m.category || '') + '</span>';
+          const val = '<code class="text-xs bg-white px-2 py-1 rounded border border-border"' + title + '>' + esc(auditDisplayMatchValue(m)) + '</code>';
+          const meta = '<span class="text-xs text-muted">' + esc(t('audit.metaLen')) + '=' + esc(String(m.length || 0)) + (m.truncated ? (' · ' + esc(t('audit.metaTrunc'))) : '') + '</span>';
+          return '<div class="flex items-center gap-2 bg-surface rounded border border-border px-2 py-1">' + cat + val + meta + '</div>';
+        }).join('') +
+      '</div>'
+    );
+
+    const summary = '<div class="flex justify-between items-start gap-4">' +
+      '<div class="min-w-0">' +
+        '<div class="text-xs text-muted">' + esc(fmtTime(ev.time)) + '</div>' +
+        '<div class="text-sm font-medium text-text truncate">' + esc((ev.method || '') + ' ' + (ev.host || '') + (ev.path || '')) + '</div>' +
+        '<div class="text-xs text-muted mt-1 truncate">' + esc(ev.content_type || '') + '</div>' +
+      '</div>' +
+      '<div class="shrink-0">' + tag + '</div>' +
+    '</div>';
+
+    const click = id ? (' onclick="showAuditDetail(' + id + ')" role="button" tabindex="0"') : '';
+    return '<div class="pattern-item p-4 bg-white rounded-lg border border-border hover:shadow-sm cursor-pointer"' + click + '>' + summary + noteHtml + matchesHtml + '</div>';
+  }).join('');
+
+  const autoEl = document.getElementById('audit-autoscroll');
+  const auto = !!(autoEl && autoEl.checked);
+  if (auto) box.scrollTop = box.scrollHeight;
+}
+
+function findAuditEventById(id) {
+  const list = state.audit.events || [];
+  for (let i = list.length - 1; i >= 0; i--) {
+    if (Number(list[i]?.id || 0) === Number(id || 0)) return list[i];
+  }
+  return null;
+}
+
+function auditStatusTag(ev) {
+  const hit = (ev?.redacted_count || 0) > 0;
+  const attempted = !!ev?.attempted;
+  if (hit) return '<span class="tag tag-green">' + t('audit.hit') + ' ' + esc(String(ev.redacted_count || 0)) + '</span>';
+  if (attempted) return '<span class="tag tag-yellow">' + t('audit.nohit') + '</span>';
+  return '<span class="tag tag-red">' + t('audit.skipped') + '</span>';
+}
+
+function showAuditDetail(id) {
+  const ev = findAuditEventById(id);
+  if (!ev) { toast(t('audit.detail.notFound'), 'error'); return; }
+
+  closeModal();
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay'; overlay.id = 'modal-overlay';
+  overlay.onclick = function(e) { if (e.target === overlay) closeModal(); };
+
+  const note = auditNoteText(ev.note);
+  const reqLine = (ev.method || '') + ' ' + (ev.host || '') + (ev.path || '');
+  const ct = ev.content_type || '';
+
+  const matches = Array.isArray(ev.matches) ? ev.matches : [];
+  const matchesHtml = matches.length === 0
+    ? ('<div class="text-sm text-muted">' + t('audit.detail.noMatches') + '</div>')
+    : ('<div class="space-y-2">' + matches.map(m => {
+        const cat = '<span class="tag tag-blue">' + esc(m.category || '') + '</span>';
+        const ph = m.placeholder ? ('<code class="text-xs bg-white px-2 py-1 rounded border border-border break-all">' + esc(m.placeholder) + '</code>') : ('<span class="text-xs text-muted">-</span>');
+        const displayVal = auditDisplayMatchValue(m);
+        const val = '<code class="text-xs bg-white px-2 py-1 rounded border border-border break-all">' + esc(displayVal) + '</code>';
+        const isPreviewDisplay = !!state.audit.redact_log || !!m.is_preview;
+        const mode = isPreviewDisplay ? ('<span class="tag tag-yellow">' + t('audit.detail.preview') + '</span>') : ('<span class="tag tag-red">' + t('audit.detail.original') + '</span>');
+        const meta = '<span class="text-xs text-muted">' + esc(t('audit.metaLen')) + '=' + esc(String(m.length || 0)) + (m.truncated ? (' · ' + esc(t('audit.metaTrunc'))) : '') + '</span>';
+        return '<div class="flex flex-col gap-2 p-3 bg-surface rounded-lg border border-border">' +
+          '<div class="flex flex-wrap items-center gap-2">' + cat + mode + meta + '</div>' +
+          '<div class="text-xs text-muted">' + t('audit.detail.placeholder') + '</div>' +
+          '<div>' + ph + '</div>' +
+          '<div class="text-xs text-muted">' + t('audit.detail.value') + '</div>' +
+          '<div>' + val + '</div>' +
+        '</div>';
+      }).join('') + '</div>');
+
+  overlay.innerHTML =
+    '<div class="modal-content" style="width: 760px; max-width: 94vw;">' +
+      '<div class="flex justify-between items-start gap-4 mb-4">' +
+        '<div>' +
+          '<h3 class="text-lg font-bold text-text">' + t('audit.detail.title') + '</h3>' +
+          '<div class="text-xs text-muted mt-1">' + esc(fmtTime(ev.time)) + '</div>' +
+        '</div>' +
+        '<button class="btn btn-secondary" onclick="closeModal()">' + t('audit.detail.close') + '</button>' +
+      '</div>' +
+      '<div class="space-y-3">' +
+        '<div class="flex flex-wrap items-center gap-2">' + auditStatusTag(ev) + '</div>' +
+        '<div class="text-sm"><span class="text-muted">' + t('audit.detail.request') + '</span><div class="mt-1"><code class="text-xs bg-white px-2 py-1 rounded border border-border break-all">' + esc(reqLine) + '</code></div></div>' +
+        '<div class="text-sm"><span class="text-muted">' + t('audit.detail.contentType') + '</span><div class="mt-1"><code class="text-xs bg-white px-2 py-1 rounded border border-border break-all">' + esc(ct || '-') + '</code></div></div>' +
+        '<div class="text-sm"><span class="text-muted">' + t('audit.detail.responseStatus') + '</span><div class="mt-1"><code class="text-xs bg-white px-2 py-1 rounded border border-border break-all">' + esc(String(ev.response_status || '-')) + '</code></div></div>' +
+        '<div class="text-sm"><span class="text-muted">' + t('audit.detail.responseType') + '</span><div class="mt-1"><code class="text-xs bg-white px-2 py-1 rounded border border-border break-all">' + esc(ev.response_content_type || '-') + '</code></div></div>' +
+        '<div class="text-sm"><span class="text-muted">' + t('audit.detail.restoreApplied') + '</span><div class="mt-1">' + (ev.restore_applied ? '<span class="tag tag-green">' + t('certs.yes') + '</span>' : '<span class="tag tag-yellow">' + t('certs.no') + '</span>') + '</div></div>' +
+        '<div class="text-sm"><span class="text-muted">' + t('audit.detail.note') + '</span><div class="mt-1 text-sm text-text">' + esc(note || '-') + '</div></div>' +
+      '</div>' +
+      '<div class="mt-6">' +
+        '<h4 class="font-semibold text-text mb-2">' + t('audit.detail.matches') + '</h4>' +
+        matchesHtml +
+      '</div>' +
+    '</div>';
+
+  document.body.appendChild(overlay);
+  overlay.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeModal(); });
+}
+
+function stopAuditStream() {
+  if (auditES) {
+    try { auditES.close(); } catch (e) { /* ignore */ }
+    auditES = null;
+  }
+}
+
+function startAuditStream() {
+  stopAuditStream();
+  const status = document.getElementById('audit-status');
+  if (status) status.textContent = t('audit.connecting');
+
+  auditES = new EventSource('/manager/api/audit/stream?limit=200');
+  auditES.addEventListener('audit_init', e => {
+    try {
+      const d = JSON.parse(e.data || '{}');
+      state.audit.redact_log = !!d.redact_log;
+      state.audit.max_events = d.max_events || 200;
+      state.audit.events = Array.isArray(d.events) ? d.events : [];
+      renderAuditMeta();
+      renderAuditList();
+      if (status) status.textContent = '';
+    } catch (err) {
+      console.error(err);
+    }
+  });
+  auditES.addEventListener('audit_event', e => {
+    try {
+      const ev = JSON.parse(e.data || '{}');
+      const cur = Array.isArray(state.audit.events) ? state.audit.events : [];
+      const id = Number(ev?.id || 0);
+      if (id > 0) {
+        const idx = cur.findIndex(x => Number(x?.id || 0) === id);
+        if (idx >= 0) cur[idx] = ev;
+        else cur.push(ev);
+      } else {
+        cur.push(ev);
+      }
+      state.audit.events = cur;
+      const max = state.audit.max_events || 200;
+      if (state.audit.events.length > max) state.audit.events = state.audit.events.slice(state.audit.events.length - max);
+      renderAuditList();
+    } catch (err) {
+      console.error(err);
+    }
+  });
+  auditES.onerror = () => {
+    if (status) status.textContent = t('audit.reconnecting');
+    setTimeout(() => { if ((window.location.hash || '').includes('#/audit')) startAuditStream(); }, 2000);
+  };
+}
+
+async function clearAudit() {
+  if (!confirm(t('audit.clearConfirm'))) return;
+  try {
+    await api.del('/audit');
+    state.audit.events = [];
+    renderAuditList();
+    toast(t('audit.cleared'));
+  } catch (e) {
+    toast(t('audit.clearFailed') + ': ' + e.message, 'error');
+  }
+}
+
+function stopLogsStream() {
+  if (logsES) {
+    try { logsES.close(); } catch (e) { /* ignore */ }
+    logsES = null;
+  }
+}
+
+function logsTail() {
+  const el = document.getElementById('logs-tail');
+  const v = parseInt(el?.value || '200', 10);
+  if (!Number.isFinite(v)) return 200;
+  return Math.max(1, Math.min(2000, v));
+}
+
+async function loadLogsOnce() {
+  const tail = logsTail();
+  const d = await api.get('/logs?tail=' + tail);
+  state.logs = {
+    configured_path: d?.configured_path ?? '',
+    effective_path: d?.effective_path ?? '',
+    exists: !!d?.exists,
+    lines: Array.isArray(d?.lines) ? d.lines : [],
+    warning: d?.warning ?? ''
+  };
+  renderLogsMeta();
+  renderLogsList();
+}
+
+function startLogsStream() {
+  stopLogsStream();
+  const status = document.getElementById('logs-status');
+  if (status) status.textContent = t('logs.connecting');
+
+  const tail = logsTail();
+  logsES = new EventSource('/manager/api/logs/stream?tail=' + tail);
+  logsES.addEventListener('logs_init', e => {
+    try {
+      const d = JSON.parse(e.data || '{}');
+      state.logs.configured_path = d?.configured_path ?? '';
+      state.logs.effective_path = d?.effective_path ?? '';
+      state.logs.exists = !!d?.exists;
+      state.logs.warning = d?.warning ?? '';
+      state.logs.lines = Array.isArray(d?.lines) ? d.lines : [];
+      renderLogsMeta();
+      renderLogsList();
+      if (status) status.textContent = '';
+    } catch (err) {
+      console.error(err);
+    }
+  });
+  logsES.addEventListener('logs_append', e => {
+    try {
+      const d = JSON.parse(e.data || '{}');
+      const add = Array.isArray(d?.lines) ? d.lines : [];
+      if (add.length === 0) return;
+      const cur = state.logs.lines || [];
+      state.logs.lines = cur.concat(add);
+      const max = 5000;
+      if (state.logs.lines.length > max) state.logs.lines = state.logs.lines.slice(state.logs.lines.length - max);
+      renderLogsList();
+    } catch (err) {
+      console.error(err);
+    }
+  });
+  logsES.onerror = () => {
+    if (status) status.textContent = t('logs.reconnecting');
+    setTimeout(() => {
+      if ((window.location.hash || '').includes('#/logs') && (document.getElementById('logs-follow')?.checked ?? true)) startLogsStream();
+    }, 2000);
+  };
+}
+
+async function refreshLogs() {
+  try {
+    const follow = document.getElementById('logs-follow')?.checked ?? true;
+    if (follow) startLogsStream();
+    else await loadLogsOnce();
+  } catch (e) {
+    toast(e.message || String(e), 'error');
+  }
+}
+
+function toggleLogsFollow(on) {
+  if (!!on) startLogsStream();
+  else stopLogsStream();
+}
+
+async function copyLogs() {
+  try {
+    const q = (document.getElementById('logs-search')?.value || '').trim().toLowerCase();
+    const lines = (state.logs.lines || []).filter(ln => !q || (String(ln || '').toLowerCase().includes(q)));
+    const text = lines.join('\n');
+    if (!text) return;
+
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+    }
+    toast(t('logs.copied'));
+  } catch (e) {
+    toast(t('logs.copyFailed') + ': ' + (e.message || String(e)), 'error');
+  }
+}
+
+function renderLogsMeta() {
+  const cfg = document.getElementById('logs-configured');
+  const eff = document.getElementById('logs-effective');
+  const ex = document.getElementById('logs-exists');
+  const warn = document.getElementById('logs-warning');
+
+  if (cfg) cfg.textContent = state.logs.configured_path || '-';
+  if (eff) eff.textContent = state.logs.effective_path || '-';
+  if (ex) {
+    const ok = !!state.logs.exists;
+    ex.textContent = ok ? t('logs.exists') : t('logs.missing');
+    ex.className = 'tag ' + (ok ? 'tag-green' : 'tag-red');
+  }
+  if (warn) {
+    const w = (state.logs.warning || '').trim();
+    warn.innerHTML = w ? ('<span class="tag tag-yellow mr-2">' + t('logs.warning') + '</span><span class="text-muted">' + esc(w) + '</span>') : '';
+  }
+}
+
+function renderLogsList() {
+  const box = document.getElementById('logs-box');
+  const empty = document.getElementById('logs-empty');
+  if (!box || !empty) return;
+
+  const q = (document.getElementById('logs-search')?.value || '').trim().toLowerCase();
+  let lines = state.logs.lines || [];
+  if (q) lines = lines.filter(ln => String(ln || '').toLowerCase().includes(q));
+
+  if (lines.length === 0) {
+    box.innerHTML = '';
+    empty.textContent = t('logs.empty');
+    return;
+  }
+
+  empty.textContent = '';
+  box.innerHTML = lines.map(ln =>
+    '<div class="font-mono text-xs whitespace-pre-wrap break-words py-1 border-b border-border last:border-b-0">' +
+      esc(String(ln ?? '')) +
+    '</div>'
+  ).join('');
+
+  if (document.getElementById('logs-autoscroll')?.checked ?? true) {
+    box.scrollTop = box.scrollHeight;
+  }
+}
+
+async function renderLogs() {
+  document.getElementById('main-content').innerHTML =
+    '<div class="mb-8"><h2 class="text-2xl font-bold text-text">' + t('logs.title') + '</h2><p class="text-muted mt-1">' + t('logs.subtitle') + '</p></div>' +
+    '<div class="card p-6 mb-6">' +
+      '<div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">' +
+        '<div class="space-y-3">' +
+          '<div class="text-sm"><span class="text-muted">' + t('logs.configuredPath') + '</span><div class="mt-1"><code id="logs-configured" class="text-xs bg-white px-2 py-1 rounded border border-border break-all">-</code></div></div>' +
+          '<div class="text-sm"><span class="text-muted">' + t('logs.effectivePath') + '</span><div class="mt-1 flex flex-wrap items-center gap-2"><code id="logs-effective" class="text-xs bg-white px-2 py-1 rounded border border-border break-all">-</code><span id="logs-exists" class="tag tag-yellow">-</span></div></div>' +
+          '<div id="logs-warning" class="text-xs"></div>' +
+        '</div>' +
+        '<div class="flex flex-wrap items-center gap-2 justify-end">' +
+          '<label class="text-sm text-muted">' + t('logs.tail') + ' <select id="logs-tail" class="ml-2" onchange="refreshLogs()"><option value="200">200</option><option value="500">500</option><option value="1000">1000</option><option value="2000">2000</option></select></label>' +
+          '<label class="text-sm text-muted flex items-center gap-2"><input type="checkbox" id="logs-follow" checked onchange="toggleLogsFollow(this.checked)">' + t('logs.follow') + '</label>' +
+          '<button class="btn btn-secondary text-sm" onclick="refreshLogs()">' + t('logs.refresh') + '</button>' +
+          '<button class="btn btn-secondary text-sm" onclick="copyLogs()">' + t('logs.copy') + '</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="text-xs text-muted mt-3" id="logs-status"></div>' +
+    '</div>' +
+    '<div class="card p-6">' +
+      '<div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">' +
+        '<input type="text" id="logs-search" placeholder="' + t('logs.search') + '" class="w-full md:w-[60%]" oninput="renderLogsList()">' +
+        '<label class="text-sm text-muted flex items-center gap-2"><input type="checkbox" id="logs-autoscroll" checked onchange="renderLogsList()">' + t('logs.autoscroll') + '</label>' +
+      '</div>' +
+      '<div id="logs-box" class="overflow-auto bg-white border border-border rounded-lg p-3" style="height: 60vh;"></div>' +
+      '<div class="text-xs text-muted mt-3" id="logs-empty"></div>' +
+    '</div>';
+
+  state.logs.lines = [];
+  renderLogsMeta();
+  renderLogsList();
+  startLogsStream();
+}
+
+async function renderPatterns() {
+  document.getElementById('main-content').innerHTML = '<div class="mb-8"><h2 class="text-2xl font-bold text-text">' + t('patterns.title') + '</h2><p class="text-muted mt-1">' + t('patterns.subtitle') + '</p></div><div class="card p-6"><div class="flex justify-between items-center mb-4"><h3 class="font-semibold text-text">' + t('patterns.regex') + '</h3><button class="btn btn-primary text-sm" onclick="showAddKeyword()">' + t('patterns.add') + '</button></div><div id="keywords-list" class="space-y-2"><div class="text-muted text-sm py-4 text-center">' + t('patterns.loading') + '</div></div></div>';
+  await loadPatterns();
+}
+async function loadPatterns() { try { state.patterns = normalizePatterns(await api.get('/patterns')); renderPatternsLists(); } catch (e) { console.error(e); } }
+function renderPatternsLists() {
+  const re = document.getElementById('keywords-list');
+  const list = state.patterns?.keywords || [];
+  if (list.length === 0) re.innerHTML = '<div class="text-muted text-sm py-4 text-center">' + t('patterns.noRegex') + '</div>';
+  else re.innerHTML = list.map((k, i) => '<div class="pattern-item flex justify-between items-center p-3 bg-surface rounded-lg"><div class="flex items-center gap-2"><code class="text-sm bg-white px-2 py-1 rounded">' + esc(k.value) + '</code><span class="tag tag-blue">' + esc(k.category || 'TEXT') + '</span></div><button class="delete-btn text-muted hover:text-danger" onclick="deletePattern(\'keywords\',' + i + ')"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button></div>').join('');
+}
+async function deletePattern(type, idx) { if (!confirm(t('patterns.deleteConfirm'))) return; try { await api.del('/patterns/' + type + '/' + idx); toast(t('patterns.deleted')); await loadPatterns(); } catch (e) { toast(t('patterns.deleteFailed') + ': ' + e.message, 'error'); } }
+
+function showAddKeyword() {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay'; overlay.id = 'modal-overlay';
+  overlay.onclick = function(e) { if (e.target === overlay) closeModal(); };
+  overlay.innerHTML = '<div class="modal-content"><h3 class="text-lg font-bold text-text mb-6">' + esc(t('patterns.addRuleTitle')) + '</h3>' +
+    '<div class="mb-4"><label class="block text-sm font-medium text-text mb-2">' + t('patterns.keyword.value') + ' <span class="text-danger">*</span></label>' +
+      '<input type="text" id="rule-keyword" class="w-full" placeholder="' + t('patterns.keyword.placeholder') + '"></div>' +
+    '<div class="mb-4"><label class="block text-sm font-medium text-text mb-2">' + t('patterns.keyword.category') + '</label>' +
+      '<input type="text" id="rule-keyword-category" class="w-full font-mono" placeholder="' + t('patterns.keyword.categoryPlaceholder') + '" value="TEXT"></div>' +
+    '<div class="flex justify-end gap-3 mt-6"><button class="btn btn-secondary" onclick="closeModal()">' + t('patterns.cancel') + '</button>' +
+    '<button class="btn btn-primary" onclick="confirmAddKeyword()">' + t('patterns.confirm') + '</button></div></div>';
+  document.body.appendChild(overlay);
+  setTimeout(function() { var el = document.getElementById('rule-keyword'); if (el) el.focus(); }, 100);
+}
+
+function confirmAddKeyword() {
+  const v = sanitizeInputText(document.getElementById('rule-keyword')?.value || '');
+  if (!v) { toast(t('patterns.valueRequired'), 'error'); return; }
+  let cat = sanitizeCategoryInput(document.getElementById('rule-keyword-category')?.value || '');
+  if (!cat) cat = 'TEXT';
+  closeModal();
+  addPattern('keyword', { value: v, category: cat });
+}
+// 格式匹配：提供“掩码语法”（更友好）与“变量写法”（兼容旧版）
+const MASK_VARS = {
+  '#': { desc: { zh: '单个数字 (0-9)', en: 'Single digit (0-9)' } },
+  'A': { desc: { zh: '单个字母 (a-z, A-Z)', en: 'Single letter (a-z, A-Z)' } },
+  'X': { desc: { zh: '单个字母或数字', en: 'Single letter or digit' } },
+  'H': { desc: { zh: '单个十六进制字符 (0-9, a-f)', en: 'Single hex char (0-9, a-f)' } },
+  'S': { desc: { zh: '单个空白字符', en: 'Single whitespace char' } },
+  '?': { desc: { zh: '任意单字符', en: 'Any single character' } },
+  '*': { desc: { zh: '任意内容（可变长度）', en: 'Any content (variable length)' } }
+};
+
+// 常用模板：不需要用户理解正则
+const PRESET_RULES = [
+  { id: 'email', name: { zh: '邮箱', en: 'Email' }, desc: { zh: '常见邮箱地址', en: 'Email address' }, pattern: '(?i)[a-z0-9._%+-]+@[a-z0-9.-]+\\.[a-z]{2,}', category: 'EMAIL' },
+  { id: 'china_phone', name: { zh: '中国手机号', en: 'China phone' }, desc: { zh: '11位手机号（1[3-9] 开头）', en: '11-digit mobile (starts with 1[3-9])' }, pattern: '1[3-9]\\d{9}', category: 'CHINA_PHONE' },
+  { id: 'china_id', name: { zh: '中国身份证号', en: 'China ID' }, desc: { zh: '18位身份证号（末位可为 X）', en: '18-digit ID (last may be X)' }, pattern: '\\d{17}[\\dXx]', category: 'CHINA_ID' },
+  { id: 'uuid', name: { zh: 'UUID', en: 'UUID' }, desc: { zh: '标准 UUID（含短横线）', en: 'Standard UUID (with hyphens)' }, pattern: '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}', category: 'UUID' },
+  { id: 'ipv4', name: { zh: 'IPv4 地址', en: 'IPv4 address' }, desc: { zh: '点分十进制 IPv4（不校验每段范围）', en: 'Dotted-decimal IPv4 (range not validated)' }, pattern: '(?:\\d{1,3}\\.){3}\\d{1,3}', category: 'IPV4' },
+  { id: 'mac', name: { zh: 'MAC 地址', en: 'MAC address' }, desc: { zh: '如 00:1A:2B:3C:4D:5E', en: 'e.g. 00:1A:2B:3C:4D:5E' }, pattern: '(?i)(?:[0-9a-f]{2}:){5}[0-9a-f]{2}', category: 'MAC' }
+];
+
+// 变量写法（旧版）：{d} / {d{3}} / {w+} / {@} 等
+const FORMAT_VARS = {
+  'd': { regex: '\\\\d', desc: { zh: '单个数字 (0-9)', en: 'Single digit (0-9)' } },
+  'd{N}': { regex: null, desc: { zh: 'N个数字', en: 'N digits' } },
+  'd{N,M}': { regex: null, desc: { zh: 'N到M个数字', en: 'N to M digits' } },
+  'w': { regex: '\\\\w', desc: { zh: '单个字母/数字/下划线', en: 'Single word char (a-z, 0-9, _)' } },
+  'w+': { regex: '\\\\w+', desc: { zh: '一个或多个字母/数字', en: 'One or more word chars' } },
+  'a': { regex: '[a-zA-Z]', desc: { zh: '单个字母', en: 'Single letter (a-z)' } },
+  'a+': { regex: '[a-zA-Z]+', desc: { zh: '一个或多个字母', en: 'One or more letters' } },
+  '*': { regex: '.*', desc: { zh: '任意内容', en: 'Any content' } },
+  '.': { regex: '\\\\.', desc: { zh: '点号', en: 'Dot (literal)' } },
+  '@': { regex: '@', desc: { zh: '@符号', en: '@ symbol' } }
+};
+
+function buildLegacyFormatRegex(formatStr) {
+  return formatStr.replace(/\{([^}]+)\}/g, function(match, token) {
+    token = token.trim();
+    // d{N} pattern
+    const dRepeat = token.match(/^d\{(\d+(?:,\d+)?)\}$/);
+    if (dRepeat) return '\\d{' + dRepeat[1] + '}';
+    // w{N} pattern
+    const wRepeat = token.match(/^w\{(\d+(?:,\d+)?)\}$/);
+    if (wRepeat) return '\\w{' + wRepeat[1] + '}';
+    // a{N} pattern
+    const aRepeat = token.match(/^a\{(\d+(?:,\d+)?)\}$/);
+    if (aRepeat) return '[a-zA-Z]{' + aRepeat[1] + '}';
+    // Simple lookups
+    const simple = { 'd': '\\d', 'w': '\\w', 'w+': '\\w+', 'a': '[a-zA-Z]', 'a+': '[a-zA-Z]+', '*': '.*', '.': '\\.', '@': '@' };
+    if (simple[token]) return simple[token];
+    // Unknown token, return literal
+    return escapeRegex(token);
+  });
+}
+
+function buildMaskRegex(maskStr) {
+  const tokens = {
+    '#': '\\d',
+    'A': '[A-Za-z]',
+    'X': '[A-Za-z0-9]',
+    'H': '[0-9a-fA-F]',
+    'S': '\\s',
+    '?': '.'
+  };
+
+  let out = '';
+  let i = 0;
+  while (i < maskStr.length) {
+    const ch = maskStr[i];
+
+    // 转义：\\# 表示字面量 '#'
+    if (ch === '\\\\' && i + 1 < maskStr.length) {
+      out += escapeRegex(maskStr[i + 1]);
+      i += 2;
+      continue;
+    }
+
+    // '*'：任意内容（可变长度）
+    if (ch === '*') {
+      while (i < maskStr.length && maskStr[i] === '*') i++;
+      out += '.*';
+      continue;
+    }
+
+    const token = tokens[ch];
+    if (token) {
+      // 量词：#{11} / A{2,4}
+      if (i + 1 < maskStr.length && maskStr[i + 1] === '{') {
+        const close = maskStr.indexOf('}', i + 2);
+        if (close !== -1) {
+          const quant = maskStr.slice(i + 2, close).trim();
+          if (/^\\d+(?:,\\d+)?$/.test(quant)) {
+            out += token + '{' + quant + '}';
+            i = close + 1;
+            continue;
+          }
+        }
+      }
+
+      // 连续同类 token 合并为 {n}
+      let j = i + 1;
+      while (j < maskStr.length && maskStr[j] === ch) j++;
+      const count = j - i;
+      out += count === 1 ? token : token + '{' + count + '}';
+      i = j;
+      continue;
+    }
+
+    out += escapeRegex(ch);
+    i++;
+  }
+
+  return out;
+}
+
+function buildFormatRegex(input) {
+  const val = (input || '').trim();
+  if (!val) return '';
+  // 兼容两种写法：
+  // - 掩码：###-####-#### / #{11}
+  // - 变量：{d{3}}-{d{4}}-{d{4}}
+  const looksLegacy = /\{[a-zA-Z*@.]/.test(val);
+  return looksLegacy ? buildLegacyFormatRegex(val) : buildMaskRegex(val);
+}
+
+function showAddRegex() {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay'; overlay.id = 'modal-overlay';
+  overlay.onclick = function(e) { if (e.target === overlay) closeModal(); };
+  overlay.innerHTML = '<div class="modal-content"><h3 class="text-lg font-bold text-text mb-6">' + esc(t('patterns.addRuleTitle')) + '</h3>' +
+    '<div class="mb-4"><label class="block text-sm font-medium text-text mb-2">' + t('patterns.ruleType') + '</label>' +
+    '<div class="grid grid-cols-2 gap-2">' +
+    '<button class="btn btn-secondary rule-type-btn text-sm" data-type="format" onclick="switchRuleType(\'format\')">' + t('patterns.ruleType.format') + '</button>' +
+    '<button class="btn btn-secondary rule-type-btn text-sm" data-type="contains" onclick="switchRuleType(\'contains\')">' + t('patterns.ruleType.contains') + '</button>' +
+    '<button class="btn btn-secondary rule-type-btn text-sm" data-type="affix" onclick="switchRuleType(\'affix\')">' + t('patterns.ruleType.affix') + '</button>' +
+    '<button class="btn btn-secondary rule-type-btn text-sm" data-type="advanced" onclick="switchRuleType(\'advanced\')">' + t('patterns.ruleType.advanced') + '</button>' +
+    '<button class="btn btn-secondary rule-type-btn text-sm col-span-2" data-type="presets" onclick="switchRuleType(\'presets\')">' + t('patterns.ruleType.presets') + '</button>' +
+    '</div></div>' +
+    '<div id="rule-fields"></div>' +
+    '<div class="flex justify-end gap-3 mt-6"><button class="btn btn-secondary" onclick="closeModal()">' + t('patterns.cancel') + '</button>' +
+    '<button class="btn btn-primary" onclick="confirmAddRule()">' + t('patterns.confirm') + '</button></div></div>';
+  document.body.appendChild(overlay);
+  overlay.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeModal(); });
+  switchRuleType('format');
+}
+
+function renderFormatVarsHelp() {
+  const lang = currentLang;
+  return Object.entries(FORMAT_VARS).map(function(e) {
+    const desc = e[1].desc[lang] || '';
+    return '<code class="token-btn text-xs bg-white px-1.5 py-0.5 rounded border border-border cursor-pointer hover:bg-accent hover:text-white hover:border-accent" role="button" tabindex="0" onclick="insertFormatVar(\'' + e[0] + '\')" onfocus="showTokenHelp(\'legacy\',\'' + e[0] + '\')" onmouseenter="showTokenHelp(\'legacy\',\'' + e[0] + '\')" onkeydown="handleTokenKeydown(event,\'legacy\',\'' + e[0] + '\')" aria-label="' + esc('{' + e[0] + '} ' + desc) + '" title="' + esc(desc) + '">{' + esc(e[0]) + '}</code>';
+  }).join(' ');
+}
+
+function renderMaskVarsHelp() {
+  const lang = currentLang;
+  return Object.entries(MASK_VARS).map(function(e) {
+    const desc = e[1].desc[lang] || '';
+    return '<code class="token-btn text-xs bg-white px-1.5 py-0.5 rounded border border-border cursor-pointer hover:bg-accent hover:text-white hover:border-accent" role="button" tabindex="0" onclick="insertMaskVar(\'' + e[0] + '\')" onfocus="showTokenHelp(\'mask\',\'' + e[0] + '\')" onmouseenter="showTokenHelp(\'mask\',\'' + e[0] + '\')" onkeydown="handleTokenKeydown(event,\'mask\',\'' + e[0] + '\')" aria-label="' + esc(e[0] + ' ' + desc) + '" title="' + esc(desc) + '">' + esc(e[0]) + '</code>';
+  }).join(' ');
+}
+
+function showTokenHelp(group, token) {
+  const lang = currentLang;
+  const sep = lang === 'zh' ? '：' : ': ';
+
+  let hintEl = null;
+  let display = token;
+  let desc = '';
+
+  if (group === 'mask') {
+    hintEl = document.getElementById('mask-vars-hint');
+    desc = MASK_VARS?.[token]?.desc?.[lang] || '';
+  } else {
+    hintEl = document.getElementById('legacy-vars-hint');
+    display = '{' + token + '}';
+    desc = FORMAT_VARS?.[token]?.desc?.[lang] || '';
+  }
+
+  if (!hintEl) return;
+  hintEl.textContent = desc ? (display + sep + desc) : '';
+}
+
+function handleTokenKeydown(e, group, token) {
+  if (!e) return;
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  e.preventDefault();
+  if (group === 'mask') insertMaskVar(token);
+  else insertFormatVar(token);
+}
+
+function insertFormatVar(v) {
+  const el = document.getElementById('rule-format-input');
+  if (!el) return;
+  const start = el.selectionStart, end = el.selectionEnd;
+  const text = el.value;
+  el.value = text.slice(0, start) + '{' + v + '}' + text.slice(end);
+  el.focus();
+  el.selectionStart = el.selectionEnd = start + v.length + 2;
+  updateFormatPreview();
+}
+
+function insertMaskVar(v) {
+  const el = document.getElementById('rule-format-input');
+  if (!el) return;
+  const start = el.selectionStart, end = el.selectionEnd;
+  const text = el.value;
+  el.value = text.slice(0, start) + v + text.slice(end);
+  el.focus();
+  el.selectionStart = el.selectionEnd = start + v.length;
+  updateFormatPreview();
+}
+
+function updateFormatPreview() {
+  const el = document.getElementById('rule-format-input');
+  const preview = document.getElementById('format-preview');
+  if (!el || !preview) return;
+  const val = el.value.trim();
+  if (!val) { preview.textContent = ''; return; }
+  try {
+    const regex = buildFormatRegex(val);
+    preview.innerHTML = t('patterns.format.preview') + ': <code class="font-mono text-xs">' + esc(regex) + '</code>';
+    preview.className = 'text-xs text-muted mt-2';
+  } catch (e) {
+    preview.textContent = t('patterns.format.invalid');
+    preview.className = 'text-xs text-danger mt-2';
+  }
+}
+
+function switchRuleType(type) {
+  document.querySelectorAll('.rule-type-btn').forEach(b => {
+    b.classList.remove('btn-primary'); b.classList.add('btn-secondary');
+    if (b.dataset.type === type) { b.classList.remove('btn-secondary'); b.classList.add('btn-primary'); }
+  });
+  const fields = document.getElementById('rule-fields');
+  fields.dataset.ruleType = type;
+  if (type === 'format') {
+    fields.innerHTML = '<div class="mb-3"><label class="block text-sm font-medium text-text mb-2">' + t('patterns.format.maskVars') + '</label>' +
+      '<div class="flex flex-wrap gap-1.5 mb-2">' + renderMaskVarsHelp() + '</div>' +
+      '<div id="mask-vars-hint" class="text-xs text-muted" aria-live="polite"></div></div>' +
+      '<details class="mb-3"><summary class="text-sm font-medium text-text cursor-pointer select-none">' + t('patterns.format.vars') + '</summary>' +
+      '<div class="flex flex-wrap gap-1.5 mt-2">' + renderFormatVarsHelp() + '</div>' +
+      '<div id="legacy-vars-hint" class="text-xs text-muted mt-2" aria-live="polite"></div></details>' +
+      '<div class="mb-2"><label class="block text-sm font-medium text-text mb-2">' + t('patterns.format.input') + ' <span class="text-danger">*</span></label>' +
+      '<input type="text" id="rule-format-input" class="w-full font-mono" placeholder="' + t('patterns.format.inputPlaceholder') + '" oninput="updateFormatPreview()"></div>' +
+      '<div id="format-preview" class="text-xs text-muted mt-2"></div>' +
+      '<div class="text-xs text-muted mt-3">' + t('patterns.format.example') + '</div>';
+    setTimeout(function() { var el = document.getElementById('rule-format-input'); if (el) el.focus(); }, 100);
+  } else if (type === 'presets') {
+    fields.dataset.selectedPreset = '';
+    const lang = currentLang;
+    const list = PRESET_RULES.map(function(p) {
+      const name = (p.name && p.name[lang]) ? p.name[lang] : p.id;
+      const desc = (p.desc && p.desc[lang]) ? p.desc[lang] : '';
+      return '<div class="preset-item p-3 rounded-lg border border-border bg-white cursor-pointer hover:bg-surface" data-id="' + esc(p.id) + '" onclick="selectPreset(this.dataset.id)">' +
+        '<div class="flex justify-between items-center gap-3">' +
+          '<div class="font-medium text-text">' + esc(name) + '</div>' +
+          '<span class="tag tag-blue">' + esc(p.category) + '</span>' +
+        '</div>' +
+        '<div class="text-xs text-muted mt-1">' + esc(desc) + '</div>' +
+        '<div class="text-xs text-muted mt-2 font-mono break-all">' + esc(p.pattern) + '</div>' +
+      '</div>';
+    }).join('');
+    fields.innerHTML = '<div class="mb-3 text-sm text-muted">' + t('patterns.presets.subtitle') + '</div>' +
+      '<div class="space-y-2">' + list + '</div>';
+  } else if (type === 'contains') {
+    fields.innerHTML = '<div class="mb-4"><label class="block text-sm font-medium text-text mb-2">' + t('patterns.contains.text') + ' <span class="text-danger">*</span></label>' +
+      '<input type="text" id="rule-contains" class="w-full" placeholder="' + t('patterns.contains.placeholder') + '"></div>';
+    setTimeout(function() { var el = document.getElementById('rule-contains'); if (el) el.focus(); }, 100);
+  } else if (type === 'affix') {
+    fields.innerHTML = '<div class="mb-4"><label class="block text-sm font-medium text-text mb-2">' + t('patterns.affix.prefix') + '</label>' +
+      '<input type="text" id="rule-prefix" class="w-full" placeholder="' + t('patterns.affix.prefixPlaceholder') + '"></div>' +
+      '<div class="mb-4"><label class="block text-sm font-medium text-text mb-2">' + t('patterns.affix.suffix') + '</label>' +
+      '<input type="text" id="rule-suffix" class="w-full" placeholder="' + t('patterns.affix.suffixPlaceholder') + '"></div>' +
+      '<div class="text-xs text-muted">' + t('patterns.affix.hint') + '</div>';
+    setTimeout(function() { var el = document.getElementById('rule-prefix'); if (el) el.focus(); }, 100);
+  } else {
+    fields.innerHTML = '<div class="mb-4"><label class="block text-sm font-medium text-text mb-2">' + t('patterns.advanced.regex') + ' <span class="text-danger">*</span></label>' +
+      '<input type="text" id="rule-regex" class="w-full font-mono" placeholder="' + t('patterns.advanced.placeholder') + '"></div>';
+    setTimeout(function() { var el = document.getElementById('rule-regex'); if (el) el.focus(); }, 100);
+  }
+}
+
+function selectPreset(id) {
+  const fields = document.getElementById('rule-fields');
+  if (!fields) return;
+  fields.dataset.selectedPreset = id;
+  document.querySelectorAll('.preset-item').forEach(function(el) {
+    const active = el.dataset.id === id;
+    el.classList.toggle('ring-2', active);
+    el.classList.toggle('ring-accent', active);
+    el.classList.toggle('border-accent', active);
+    el.classList.toggle('bg-surface', active);
+  });
+}
+
+function confirmAddRule() {
+  const type = document.getElementById('rule-fields').dataset.ruleType;
+  let pattern = '', category = 'CUSTOM';
+  if (type === 'presets') {
+    const id = document.getElementById('rule-fields').dataset.selectedPreset;
+    if (!id) { toast(t('patterns.presets.selectRequired'), 'error'); return; }
+    const p = PRESET_RULES.find(function(x) { return x.id === id; });
+    if (!p) { toast(t('patterns.presets.selectRequired'), 'error'); return; }
+    pattern = p.pattern;
+    category = p.category;
+  } else if (type === 'format') {
+    const fmt = document.getElementById('rule-format-input').value.trim();
+    if (!fmt) { toast(t('patterns.valueRequired'), 'error'); return; }
+    pattern = buildFormatRegex(fmt);
+    category = 'FORMAT';
+  } else if (type === 'contains') {
+    const text = document.getElementById('rule-contains').value.trim();
+    if (!text) { toast(t('patterns.valueRequired'), 'error'); return; }
+    pattern = escapeRegex(text);
+    category = 'TEXT';
+  } else if (type === 'affix') {
+    const prefix = document.getElementById('rule-prefix').value.trim();
+    const suffix = document.getElementById('rule-suffix').value.trim();
+    if (!prefix && !suffix) { toast(t('patterns.valueRequired'), 'error'); return; }
+    // 使用捕获组：引擎会只替换第一个捕获组，避免把整段文本都替换掉（对新手更友好）
+    // 默认仅匹配连续非空白字符，减少“.*”导致的过宽匹配。
+    const mid = '([^\\s]{1,256})';
+    pattern = (prefix ? escapeRegex(prefix) : '') + mid + (suffix ? escapeRegex(suffix) : '');
+    category = 'AFFIX';
+  } else {
+    pattern = document.getElementById('rule-regex').value.trim();
+    if (!pattern) { toast(t('patterns.valueRequired'), 'error'); return; }
+    category = 'REGEX';
+  }
+  closeModal();
+  addPattern('regex', { pattern: pattern, category: category });
+}
+
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function closeModal() {
+  const overlay = document.getElementById('modal-overlay');
+  if (overlay) overlay.remove();
+}
+async function addPattern(type, d) { try { await api.post('/patterns', { type: type, ...d }); toast(t('patterns.added')); await loadPatterns(); } catch (e) { toast(t('patterns.addFailed') + ': ' + e.message, 'error'); } }
+
+async function renderSessions() {
+  document.getElementById('main-content').innerHTML = '<div class="mb-8 flex justify-between items-start"><div><h2 class="text-2xl font-bold text-text">' + t('sessions.title') + '</h2><p class="text-muted mt-1">' + t('sessions.subtitle') + '</p></div><button class="btn btn-danger" onclick="clearSessions()">' + t('sessions.clearAll') + '</button></div><div class="card mb-6 p-4"><input type="text" id="session-search" placeholder="' + t('sessions.search') + '" class="w-full" oninput="searchSessions(this.value)"></div><div class="card"><div class="p-4 border-b border-border font-medium text-muted text-sm"><div class="grid grid-cols-3">' + t('sessions.placeholder') + ' / ' + t('sessions.category') + ' / ' + t('sessions.status') + '</div></div><div id="sessions-list"><div class="text-muted text-sm py-8 text-center">' + t('patterns.loading') + '</div></div></div>';
+  await loadSessions();
+}
+async function loadSessions(q) { try { state.sessions = await api.get(q ? '/sessions?search=' + encodeURIComponent(q) : '/sessions'); renderSessionsList(); } catch (e) { console.error(e); } }
+function renderSessionsList() {
+  const l = document.getElementById('sessions-list');
+  if (state.sessions.mappings.length === 0) l.innerHTML = '<div class="text-muted text-sm py-8 text-center">' + t('sessions.noMappings') + '</div>';
+  else l.innerHTML = state.sessions.mappings.map(m => '<div class="table-row p-4 grid grid-cols-3 items-center"><code class="text-sm font-mono">' + esc(m.placeholder) + '</code><span class="tag tag-blue">' + esc(m.category) + '</span><span class="text-muted text-sm">' + t('sessions.protected') + '</span></div>').join('');
+}
+function searchSessions(v) { loadSessions(v); }
+async function clearSessions() { if (!confirm(t('sessions.clearConfirm'))) return; try { await api.del('/sessions'); toast(t('sessions.cleared')); await loadSessions(); } catch (e) { toast(t('sessions.clearFailed'), 'error'); } }
+
+async function renderCerts() {
+  document.getElementById('main-content').innerHTML = '<div class="mb-8"><h2 class="text-2xl font-bold text-text">' + t('certs.title') + '</h2><p class="text-muted mt-1">' + t('certs.subtitle') + '</p></div><div class="card p-6"><h3 class="font-semibold text-text mb-4">' + t('certs.caCert') + '</h3><div id="cert-info" class="space-y-3"><div class="text-muted text-sm py-4">' + t('patterns.loading') + '</div></div></div><div class="card p-6 mt-6"><h3 class="font-semibold text-text mb-4">' + t('certs.actions') + '</h3><div class="flex gap-4"><button class="btn btn-primary" onclick="trustCert()">' + t('certs.installTrust') + '</button><button class="btn btn-danger" onclick="regenerateCert()">' + t('certs.regenerate') + '</button></div><p class="text-muted text-sm mt-4">' + t('certs.trustHint') + '</p><p class="text-muted text-sm mt-2">' + t('certs.regenerateNote') + '</p></div>';
+  await loadCerts();
+}
+async function loadCerts() { try { state.certs = await api.get('/certificates'); renderCertInfo(); } catch (e) { console.error(e); } }
+function renderCertInfo() {
+  const ca = state.certs.ca, i = document.getElementById('cert-info');
+  i.innerHTML = '<div class="flex justify-between gap-4"><span class="text-muted">' + t('certs.subject') + '</span><span class="font-medium text-right">' + esc(ca.subject || 'Unknown') + '</span></div>' +
+    '<div class="flex justify-between gap-4"><span class="text-muted">' + t('certs.validFrom') + '</span><span class="text-right">' + (ca.not_before || '-') + '</span></div>' +
+    '<div class="flex justify-between gap-4"><span class="text-muted">' + t('certs.validUntil') + '</span><span class="text-right">' + (ca.not_after || '-') + '</span></div>' +
+    '<div class="flex justify-between gap-4"><span class="text-muted">' + t('certs.trusted') + '</span><span class="tag ' + (ca.is_trusted ? 'tag-green' : 'tag-yellow') + '">' + (ca.is_trusted ? t('certs.yes') : t('certs.no')) + '</span></div>' +
+    '<div class="flex justify-between gap-4"><span class="text-muted">' + t('certs.fingerprint') + '</span><code class="text-sm font-mono break-all text-right max-w-[65%]">' + esc(ca.fingerprint_sha256 || '-') + '</code></div>' +
+    '<div class="flex justify-between gap-4"><span class="text-muted">' + t('certs.certPath') + '</span><code class="text-sm break-all text-right max-w-[65%]">' + esc(ca.cert_path || '-') + '</code></div>';
+}
+async function trustCert() { try { await api.post('/certificates/trust'); toast(t('certs.trustedSuccess')); await loadCerts(); } catch (e) { toast(t('certs.failed') + e.message, 'error'); } }
+async function regenerateCert() { if (!confirm(t('certs.regenerateConfirm'))) return; try { await api.post('/certificates/regenerate'); toast(t('certs.regenerated')); await loadCerts(); } catch (e) { toast(t('certs.failed') + e.message, 'error'); } }
+
+window.deletePattern = deletePattern;
+window.searchSessions = searchSessions;
+window.clearSessions = clearSessions;
+window.showAddRegex = showAddRegex;
+window.closeModal = closeModal;
+window.switchRuleType = switchRuleType;
+window.confirmAddRule = confirmAddRule;
+window.insertFormatVar = insertFormatVar;
+window.insertMaskVar = insertMaskVar;
+window.showTokenHelp = showTokenHelp;
+window.handleTokenKeydown = handleTokenKeydown;
+window.updateFormatPreview = updateFormatPreview;
+window.selectPreset = selectPreset;
+window.trustCert = trustCert;
+window.regenerateCert = regenerateCert;
+window.setLang = setLang;
+
+window.addEventListener('hashchange', route);
+initLang().then(route).catch(route);
+  </script>
+</body>
+</html>

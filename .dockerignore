@@ -1,0 +1,15 @@
+.git
+.gitignore
+.DS_Store
+.omc
+temp
+~/
+
+# 本地运行产物/敏感文件
+vibeguard
+leakslayer
+*.log
+*.wal
+*.key
+*.crt
+
