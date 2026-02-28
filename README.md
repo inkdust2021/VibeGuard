@@ -183,7 +183,9 @@ Client setup:
 - Proxy URL: `http://127.0.0.1:28657`
 - Admin UI: `http://127.0.0.1:28657/manager/`
 
-For CLI assistants, launch them via VibeGuard (process-only):
+For CLI assistants, prefer “process-only” mode (does not affect your whole terminal):
+
+- If you installed `vibeguard` on the host:
 
 ```bash
 vibeguard codex [args...]
@@ -192,6 +194,45 @@ vibeguard gemini [args...]
 vibeguard opencode [args...]
 vibeguard qwen [args...]
 vibeguard run <command> [args...]
+```
+
+- Docker-only (no host `vibeguard`): do **NOT** use `alias vibeguard='docker compose exec ... vibeguard'` for `vibeguard claude` (it runs `claude` inside the container, which is usually not installed). Instead, add this shell function to your `~/.zshrc`/`~/.bashrc`:
+
+```bash
+# Set this to the directory where you cloned VibeGuard (contains docker-compose.yml)
+export VIBEGUARD_DOCKER_DIR="$HOME/Code/VibeGuard"
+export VIBEGUARD_PROXY_URL="http://127.0.0.1:28657"
+export VIBEGUARD_CA_CERT="$VIBEGUARD_DOCKER_DIR/vibeguard-ca.crt"
+
+vibeguard() {
+  local sub="${1:-}"
+  if [ -z "$sub" ]; then
+    docker compose --project-directory "$VIBEGUARD_DOCKER_DIR" exec -T vibeguard vibeguard --help
+    return
+  fi
+  shift || true
+  case "$sub" in
+    claude|codex|gemini|opencode|qwen)
+      # Runs the assistant on the host, but only this process uses the proxy.
+      HTTPS_PROXY="$VIBEGUARD_PROXY_URL" HTTP_PROXY="$VIBEGUARD_PROXY_URL" \
+      https_proxy="$VIBEGUARD_PROXY_URL" http_proxy="$VIBEGUARD_PROXY_URL" \
+      NO_PROXY="127.0.0.1,localhost" no_proxy="127.0.0.1,localhost" \
+      NODE_EXTRA_CA_CERTS="$VIBEGUARD_CA_CERT" \
+      "$sub" "$@"
+      ;;
+    run)
+      HTTPS_PROXY="$VIBEGUARD_PROXY_URL" HTTP_PROXY="$VIBEGUARD_PROXY_URL" \
+      https_proxy="$VIBEGUARD_PROXY_URL" http_proxy="$VIBEGUARD_PROXY_URL" \
+      NO_PROXY="127.0.0.1,localhost" no_proxy="127.0.0.1,localhost" \
+      NODE_EXTRA_CA_CERTS="$VIBEGUARD_CA_CERT" \
+      "$@"
+      ;;
+    *)
+      # Proxy management subcommands are executed inside the container.
+      docker compose --project-directory "$VIBEGUARD_DOCKER_DIR" exec -T vibeguard vibeguard "$sub" "$@"
+      ;;
+  esac
+}
 ```
 
 For IDE/GUI apps (Cursor, etc), set the app’s proxy URL to `http://127.0.0.1:28657`.

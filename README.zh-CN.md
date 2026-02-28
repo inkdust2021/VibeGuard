@@ -177,7 +177,9 @@ certutil -addstore -f Root vibeguard-ca.crt
 - 代理地址：`http://127.0.0.1:28657`
 - 管理页：`http://127.0.0.1:28657/manager/`
 
-CLI 编程助手推荐用 VibeGuard 启动（仅该进程生效）：
+CLI 编程助手建议使用“仅对该进程生效”的方式（不影响整个终端会话）：
+
+- 如果你在宿主机安装了 `vibeguard`：
 
 ```bash
 vibeguard codex [args...]
@@ -186,6 +188,45 @@ vibeguard gemini [args...]
 vibeguard opencode [args...]
 vibeguard qwen [args...]
 vibeguard run <command> [args...]
+```
+
+- Docker-only（宿主机没有 `vibeguard` 二进制）：不要用 `alias vibeguard='docker compose exec ... vibeguard'` 来跑 `vibeguard claude`（会在容器里找 `claude`，通常并未安装）。建议在宿主机 `~/.zshrc`/`~/.bashrc` 中添加下面这个函数：
+
+```bash
+# 这里改成你 clone 的 VibeGuard 目录（目录中包含 docker-compose.yml）
+export VIBEGUARD_DOCKER_DIR="$HOME/Code/VibeGuard"
+export VIBEGUARD_PROXY_URL="http://127.0.0.1:28657"
+export VIBEGUARD_CA_CERT="$VIBEGUARD_DOCKER_DIR/vibeguard-ca.crt"
+
+vibeguard() {
+  local sub="${1:-}"
+  if [ -z "$sub" ]; then
+    docker compose --project-directory "$VIBEGUARD_DOCKER_DIR" exec -T vibeguard vibeguard --help
+    return
+  fi
+  shift || true
+  case "$sub" in
+    claude|codex|gemini|opencode|qwen)
+      # 在宿主机运行助手，但只对该进程注入代理环境变量
+      HTTPS_PROXY="$VIBEGUARD_PROXY_URL" HTTP_PROXY="$VIBEGUARD_PROXY_URL" \
+      https_proxy="$VIBEGUARD_PROXY_URL" http_proxy="$VIBEGUARD_PROXY_URL" \
+      NO_PROXY="127.0.0.1,localhost" no_proxy="127.0.0.1,localhost" \
+      NODE_EXTRA_CA_CERTS="$VIBEGUARD_CA_CERT" \
+      "$sub" "$@"
+      ;;
+    run)
+      HTTPS_PROXY="$VIBEGUARD_PROXY_URL" HTTP_PROXY="$VIBEGUARD_PROXY_URL" \
+      https_proxy="$VIBEGUARD_PROXY_URL" http_proxy="$VIBEGUARD_PROXY_URL" \
+      NO_PROXY="127.0.0.1,localhost" no_proxy="127.0.0.1,localhost" \
+      NODE_EXTRA_CA_CERTS="$VIBEGUARD_CA_CERT" \
+      "$@"
+      ;;
+    *)
+      # 其他管理类子命令交给容器内的 vibeguard 执行
+      docker compose --project-directory "$VIBEGUARD_DOCKER_DIR" exec -T vibeguard vibeguard "$sub" "$@"
+      ;;
+  esac
+}
 ```
 
 IDE/GUI（如 Cursor）则在软件设置里把代理地址填为 `http://127.0.0.1:28657`。
