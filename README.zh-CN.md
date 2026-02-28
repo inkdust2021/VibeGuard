@@ -110,6 +110,13 @@ docker compose pull
 docker compose up -d
 ```
 
+更新（拉取最新镜像并重启容器）：
+
+```bash
+docker compose pull vibeguard
+docker compose up -d
+```
+
 安全建议（更适合 vibecoding 场景）：尽量让 VibeGuard 的状态文件留在 *Docker 内部*（默认）。当前 `docker-compose.yml` 使用 Docker 命名卷 `vibeguard-data` 挂载到 `/root/.vibeguard`，因此宿主机本地默认不会落下 CA 私钥或配置文件。请避免把它改成类似 `~/.vibeguard:/root/.vibeguard` 的目录映射；如需宿主机信任证书，只导出 **`ca.crt`** 即可（不要拷贝 `ca.key`）。
 
 从源码构建：
@@ -122,6 +129,16 @@ docker compose -f docker-compose.yml -f docker-compose.source.yml up -d --build
 
 ```bash
 docker compose logs -f vibeguard
+```
+
+宿主机提示 `zsh: command not found: vibeguard`？
+
+- 这是 Docker-only 部署的正常现象（`vibeguard` 二进制在容器里）。
+- 如需执行 `vibeguard` CLI 命令，请在容器里运行：
+
+```bash
+docker compose exec -T vibeguard vibeguard --help
+docker compose exec -T vibeguard vibeguard version
 ```
 
 完整 Docker 部署流程（含导出 CA 证书到宿主机文件）：
