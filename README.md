@@ -311,4 +311,4 @@ gofmt -w .
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=inkdust2021/VibeGuard&type=Date)](https://star-history.com/#inkdust2021/VibeGuard&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=inkdust2021/VibeGuard&type=date&legend=top-left)](https://www.star-history.com/#inkdust2021/VibeGuard&type=date&legend=top-left)
