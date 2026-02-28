@@ -1,11 +1,18 @@
 # VibeGuard
 
+[![License](https://img.shields.io/github/license/inkdust2021/VibeGuard)](LICENSE)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/inkdust2021/VibeGuard)](go.mod)
+[![GHCR Build](https://img.shields.io/github/actions/workflow/status/inkdust2021/VibeGuard/ghcr.yml?label=ghcr)](https://github.com/inkdust2021/VibeGuard/actions/workflows/ghcr.yml)
+[![GHCR Image](https://img.shields.io/badge/ghcr.io-inkdust2021%2Fvibeguard-2ea44f?logo=docker&logoColor=white)](https://ghcr.io/inkdust2021/vibeguard)
+[![Stars](https://img.shields.io/github/stars/inkdust2021/VibeGuard?style=social)](https://github.com/inkdust2021/VibeGuard/stargazers)
+
 English | [中文](README.zh-CN.md)
 
-VibeGuard is a MITM HTTPS proxy that helps protect sensitive data when using AI
-coding assistants (e.g., Codex/Claude Code/Cursor/Copilot). It intercepts HTTPS
-traffic, redacts sensitive content in requests, and restores placeholders in
-responses (including JSON and SSE).
+VibeGuard is a MITM HTTPS proxy for protecting sensitive data when vibecoding.
+
+- Process-only proxy launcher: `vibeguard codex/claude/gemini/opencode/qwen`
+- Admin UI: rules + audit at `http://127.0.0.1:28657/manager/`
+- Placeholder restore for JSON and SSE responses
 
 ## Key Features
 

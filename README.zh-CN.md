@@ -1,8 +1,18 @@
 # VibeGuard
 
+[![License](https://img.shields.io/github/license/inkdust2021/VibeGuard)](LICENSE)
+[![Go 版本](https://img.shields.io/github/go-mod/go-version/inkdust2021/VibeGuard)](go.mod)
+[![GHCR 构建](https://img.shields.io/github/actions/workflow/status/inkdust2021/VibeGuard/ghcr.yml?label=ghcr)](https://github.com/inkdust2021/VibeGuard/actions/workflows/ghcr.yml)
+[![GHCR 镜像](https://img.shields.io/badge/ghcr.io-inkdust2021%2Fvibeguard-2ea44f?logo=docker&logoColor=white)](https://ghcr.io/inkdust2021/vibeguard)
+[![Stars](https://img.shields.io/github/stars/inkdust2021/VibeGuard?style=social)](https://github.com/inkdust2021/VibeGuard/stargazers)
+
 [English](README.md) | 中文
 
-VibeGuard 是一个 MITM HTTPS 代理，用于在使用 AI 编程助手（如 Codex/Claude Code/Cursor/Copilot）时保护敏感信息：在请求发出前对文本内容做脱敏替换，并在响应（JSON / SSE）中把占位符还原为原文。
+VibeGuard 是一个 MITM HTTPS 代理，用于在 vibecoding 时保护敏感信息。
+
+- 仅对单个助手进程生效：`vibeguard codex/claude/gemini/opencode/qwen`
+- 管理页：在 `http://127.0.0.1:28657/manager/` 配置规则并查看命中审计
+- 支持 JSON / SSE 的占位符还原
 
 ## 核心特性
 
