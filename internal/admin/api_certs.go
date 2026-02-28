@@ -18,7 +18,12 @@ type CertResponse struct {
 		NotAfter          string `json:"not_after"`
 		FingerprintSHA256 string `json:"fingerprint_sha256"`
 		IsTrusted         bool   `json:"is_trusted"`
-		CertPath          string `json:"cert_path"`
+		// TrustStatus 表示“当前运行环境”对 CA 的信任检测结果：
+		// - trusted: 已检测到受信任
+		// - untrusted: 未检测到受信任
+		// - unknown: 无法检测（例如容器内运行，无法判断宿主机/浏览器是否已信任）
+		TrustStatus string `json:"trust_status"`
+		CertPath    string `json:"cert_path"`
 	} `json:"ca"`
 }
 
@@ -52,6 +57,14 @@ func (a *Admin) handleCertificates(w http.ResponseWriter, r *http.Request) {
 
 	// Check if trusted by system
 	resp.CA.IsTrusted = cert.IsCATrusted(a.certPath)
+	if resp.CA.IsTrusted {
+		resp.CA.TrustStatus = "trusted"
+	} else if isLikelyContainerRuntime() {
+		// 容器内运行时，“系统信任库”与宿主机/浏览器并不一致，后端无法可靠判断客户端是否已信任导出的 ca.crt。
+		resp.CA.TrustStatus = "unknown"
+	} else {
+		resp.CA.TrustStatus = "untrusted"
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")

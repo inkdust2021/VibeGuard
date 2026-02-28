@@ -265,10 +265,12 @@ const i18n = {
     'certs.trusted': '已信任',
     'certs.yes': '是',
     'certs.no': '否',
+    'certs.unknown': '无法检测',
     'certs.certPath': '证书路径',
     'certs.actions': '操作',
     'certs.installTrust': '安装到用户信任库',
     'certs.trustHint': '如需安装到系统信任库（sudo，推荐用于 Codex/CLI），请在终端运行：vibeguard trust --mode system',
+    'certs.trustDockerHint': '检测到容器部署：无法自动检测/安装“宿主机”的信任状态。请按 Docker 部署章节导出 ca.crt 并在宿主机信任。',
     'certs.regenerate': '重新生成 CA',
     'certs.regenerateNote': '注意：重新生成 CA 将使所有现有证书失效，需要重新信任。',
     'certs.trustedSuccess': 'CA 证书已安装到用户信任库！',
@@ -454,10 +456,12 @@ const i18n = {
     'certs.trusted': 'Trusted',
     'certs.yes': 'Yes',
     'certs.no': 'No',
+    'certs.unknown': 'Unknown',
     'certs.certPath': 'Certificate Path',
     'certs.actions': 'Actions',
     'certs.installTrust': 'Install to User Trust Store',
     'certs.trustHint': 'To install into the system trust store (sudo, recommended for Codex/CLI), run: vibeguard trust --mode system',
+    'certs.trustDockerHint': 'Container detected: VibeGuard cannot check/install the host trust store. Export ca.crt and trust it on your host.',
     'certs.regenerate': 'Regenerate CA',
     'certs.regenerateNote': 'Note: Regenerating the CA will invalidate all existing certificates.',
     'certs.trustedSuccess': 'CA certificate installed to user trust store!',
@@ -1823,16 +1827,30 @@ function searchSessions(v) { loadSessions(v); }
 async function clearSessions() { if (!confirm(t('sessions.clearConfirm'))) return; try { await api.del('/sessions'); toast(t('sessions.cleared')); await loadSessions(); } catch (e) { toast(t('sessions.clearFailed'), 'error'); } }
 
 async function renderCerts() {
-  document.getElementById('main-content').innerHTML = '<div class="mb-8"><h2 class="text-2xl font-bold text-text">' + t('certs.title') + '</h2><p class="text-muted mt-1">' + t('certs.subtitle') + '</p></div><div class="card p-6"><h3 class="font-semibold text-text mb-4">' + t('certs.caCert') + '</h3><div id="cert-info" class="space-y-3"><div class="text-muted text-sm py-4">' + t('patterns.loading') + '</div></div></div><div class="card p-6 mt-6"><h3 class="font-semibold text-text mb-4">' + t('certs.actions') + '</h3><div class="flex gap-4"><button class="btn btn-primary" onclick="trustCert()">' + t('certs.installTrust') + '</button><button class="btn btn-danger" onclick="regenerateCert()">' + t('certs.regenerate') + '</button></div><p class="text-muted text-sm mt-4">' + t('certs.trustHint') + '</p><p class="text-muted text-sm mt-2">' + t('certs.regenerateNote') + '</p></div>';
+  document.getElementById('main-content').innerHTML = '<div class="mb-8"><h2 class="text-2xl font-bold text-text">' + t('certs.title') + '</h2><p class="text-muted mt-1">' + t('certs.subtitle') + '</p></div><div class="card p-6"><h3 class="font-semibold text-text mb-4">' + t('certs.caCert') + '</h3><div id="cert-info" class="space-y-3"><div class="text-muted text-sm py-4">' + t('patterns.loading') + '</div></div></div><div class="card p-6 mt-6"><h3 class="font-semibold text-text mb-4">' + t('certs.actions') + '</h3><div class="flex gap-4"><button id="cert-install-trust-btn" class="btn btn-primary" onclick="trustCert()">' + t('certs.installTrust') + '</button><button class="btn btn-danger" onclick="regenerateCert()">' + t('certs.regenerate') + '</button></div><p id="cert-trust-hint" class="text-muted text-sm mt-4">' + t('certs.trustHint') + '</p><p class="text-muted text-sm mt-2">' + t('certs.regenerateNote') + '</p></div>';
   await loadCerts();
 }
 async function loadCerts() { try { state.certs = await api.get('/certificates'); renderCertInfo(); } catch (e) { console.error(e); } }
 function renderCertInfo() {
   const ca = state.certs.ca, i = document.getElementById('cert-info');
+  const trustStatus = (ca.trust_status || (ca.is_trusted ? 'trusted' : 'untrusted'));
+  const trustTagClass = trustStatus === 'trusted' ? 'tag-green' : (trustStatus === 'unknown' ? 'tag-blue' : 'tag-yellow');
+  const trustText = trustStatus === 'trusted' ? t('certs.yes') : (trustStatus === 'unknown' ? t('certs.unknown') : t('certs.no'));
+
+  const hintEl = document.getElementById('cert-trust-hint');
+  if (hintEl) hintEl.textContent = (trustStatus === 'unknown') ? t('certs.trustDockerHint') : t('certs.trustHint');
+  const btn = document.getElementById('cert-install-trust-btn');
+  if (btn) {
+    const disabled = (trustStatus === 'unknown');
+    btn.disabled = disabled;
+    btn.classList.toggle('opacity-50', disabled);
+    btn.classList.toggle('cursor-not-allowed', disabled);
+    btn.title = disabled ? t('certs.trustDockerHint') : '';
+  }
   i.innerHTML = '<div class="flex justify-between gap-4"><span class="text-muted">' + t('certs.subject') + '</span><span class="font-medium text-right">' + esc(ca.subject || 'Unknown') + '</span></div>' +
     '<div class="flex justify-between gap-4"><span class="text-muted">' + t('certs.validFrom') + '</span><span class="text-right">' + (ca.not_before || '-') + '</span></div>' +
     '<div class="flex justify-between gap-4"><span class="text-muted">' + t('certs.validUntil') + '</span><span class="text-right">' + (ca.not_after || '-') + '</span></div>' +
-    '<div class="flex justify-between gap-4"><span class="text-muted">' + t('certs.trusted') + '</span><span class="tag ' + (ca.is_trusted ? 'tag-green' : 'tag-yellow') + '">' + (ca.is_trusted ? t('certs.yes') : t('certs.no')) + '</span></div>' +
+    '<div class="flex justify-between gap-4"><span class="text-muted">' + t('certs.trusted') + '</span><span class="tag ' + trustTagClass + '">' + trustText + '</span></div>' +
     '<div class="flex justify-between gap-4"><span class="text-muted">' + t('certs.fingerprint') + '</span><code class="text-sm font-mono break-all text-right max-w-[65%]">' + esc(ca.fingerprint_sha256 || '-') + '</code></div>' +
     '<div class="flex justify-between gap-4"><span class="text-muted">' + t('certs.certPath') + '</span><code class="text-sm break-all text-right max-w-[65%]">' + esc(ca.cert_path || '-') + '</code></div>';
 }
