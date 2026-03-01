@@ -187,6 +187,24 @@ func (ca *CA) DeriveStorageKey() ([]byte, error) {
 	return out, nil
 }
 
+// DerivePlaceholderKey 派生一个用于“确定性占位符生成”的对称密钥（32 字节）。
+//
+// 该密钥用于在“跨进程稳定占位符”模式下，生成稳定的占位符 token。
+// 为避免与其他用途（WAL/配置加密）复用同一 key，这里基于 DeriveStorageKey 做一次域隔离派生。
+func (ca *CA) DerivePlaceholderKey() ([]byte, error) {
+	base, err := ca.DeriveStorageKey()
+	if err != nil {
+		return nil, err
+	}
+	h := sha256.New()
+	_, _ = h.Write(base)
+	_, _ = h.Write([]byte("vibeguard.placeholder.v1"))
+	sum := h.Sum(nil)
+	out := make([]byte, 32)
+	copy(out, sum)
+	return out, nil
+}
+
 // GetCertificate returns the CA certificate as PEM bytes
 func (ca *CA) GetCertificate() []byte {
 	ca.mu.RLock()

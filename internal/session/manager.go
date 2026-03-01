@@ -23,18 +23,24 @@ type Manager struct {
 	created  map[string]time.Time // placeholder -> creation time
 	stopChan chan struct{}
 	wal      *WAL
-	// secret 用于生成占位符的不可逆 token（避免把原文哈希直接暴露给上游）。
-	// 该值只存在于本进程内，不会写入配置/日志。
-	secret []byte
+	// randomSecret 为进程启动时生成的随机 key（默认模式：仅在本进程内稳定）。
+	// deterministicSecret 为“跨进程稳定占位符”模式下使用的 key（通常由 CA 私钥派生）。
+	// 注意：
+	// - 两者都不会写入配置/日志；
+	// - deterministicSecret 一旦变化（例如重新生成 CA），同一原文会得到不同占位符。
+	randomSecret        []byte
+	deterministicSecret []byte
+	deterministicOn     bool
 }
 
 // NewManager creates a new session manager
 func NewManager(ttl time.Duration, maxSize int) *Manager {
-	secret := make([]byte, 32)
-	if _, err := io.ReadFull(rand.Reader, secret); err != nil {
+	randomSecret := make([]byte, 32)
+	if _, err := io.ReadFull(rand.Reader, randomSecret); err != nil {
 		// 极端情况下（例如系统熵源不可用），退化为时间种子；仍可避免“可被上游离线撞库”的确定性哈希占位符。
 		sum := sha256.Sum256([]byte(fmt.Sprintf("fallback-%d", time.Now().UnixNano())))
-		secret = sum[:]
+		randomSecret = make([]byte, 32)
+		copy(randomSecret, sum[:])
 	}
 
 	m := &Manager{
@@ -44,7 +50,7 @@ func NewManager(ttl time.Duration, maxSize int) *Manager {
 		ttl:      ttl,
 		maxSize:  maxSize,
 		stopChan: make(chan struct{}),
-		secret:   secret,
+		randomSecret: randomSecret,
 	}
 
 	// Start TTL cleanup goroutine
@@ -112,21 +118,28 @@ func (m *Manager) LookupReverse(original string) (string, bool) {
 // GeneratePlaceholder creates a placeholder for the given original value (does NOT register it).
 // 说明：
 //   - 旧版使用 SHA-256(original) 的截断作为 token，容易被上游用字典攻击/撞库反推出原文；
-//   - 这里改为 HMAC-SHA256(secret, original) 的截断：仍保持“同一 original → 同一 placeholder”的稳定性，
-//     但 token 不可被上游反推。
+//   - 这里使用 HMAC-SHA256(key, original) 的截断：仍保持“同一 original → 同一 placeholder”的稳定性，
+//     但 token 不可被上游反推；其中 key 可为随机（进程内稳定）或由 CA 派生（跨进程稳定）。
 func (m *Manager) GeneratePlaceholder(original, category, prefix string) string {
-	h := hmac.New(sha256.New, m.secret)
+	key := m.placeholderKey()
+	h := hmac.New(sha256.New, key)
 	_, _ = h.Write([]byte(original))
 	sum := h.Sum(nil)
 	hash12 := hex.EncodeToString(sum)[:12]
 	placeholder := fmt.Sprintf("%s%s_%s__", prefix, category, hash12)
 
 	// Check for collision
-	if existing, exists := m.Lookup(placeholder); exists && existing != original {
+	m.mu.RLock()
+	existing, exists := m.forward[placeholder]
+	m.mu.RUnlock()
+	if exists && existing != original {
 		// Collision detected, add disambiguator
 		for i := 2; ; i++ {
 			ph := fmt.Sprintf("%s%s_%s_%d__", prefix, category, hash12, i)
-			if existing, ok := m.Lookup(ph); !ok || existing == original {
+			m.mu.RLock()
+			existing, ok := m.forward[ph]
+			m.mu.RUnlock()
+			if !ok || existing == original {
 				placeholder = ph
 				break
 			}
@@ -134,6 +147,44 @@ func (m *Manager) GeneratePlaceholder(original, category, prefix string) string 
 	}
 
 	return placeholder
+}
+
+func (m *Manager) placeholderKey() []byte {
+	m.mu.RLock()
+	useDet := m.deterministicOn && len(m.deterministicSecret) == 32
+	det := m.deterministicSecret
+	randKey := m.randomSecret
+	m.mu.RUnlock()
+	if useDet {
+		return det
+	}
+	return randKey
+}
+
+// SetDeterministicPlaceholders 切换“跨进程稳定占位符”模式：
+// - enabled=false：使用进程启动时的随机 key（仅进程内稳定）；
+// - enabled=true：使用传入的 key32（应由 CA 私钥派生）。
+func (m *Manager) SetDeterministicPlaceholders(enabled bool, key32 []byte) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if !enabled {
+		m.deterministicOn = false
+		return nil
+	}
+	if len(key32) != 32 {
+		return fmt.Errorf("deterministic placeholder key must be 32 bytes, got %d", len(key32))
+	}
+	m.deterministicSecret = append([]byte(nil), key32...)
+	m.deterministicOn = true
+	return nil
+}
+
+// DeterministicPlaceholdersEnabled 返回“跨进程稳定占位符”是否处于生效状态。
+func (m *Manager) DeterministicPlaceholdersEnabled() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.deterministicOn && len(m.deterministicSecret) == 32
 }
 
 // Size returns the number of mappings

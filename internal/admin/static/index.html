@@ -255,6 +255,11 @@ const i18n = {
     'sessions.clearConfirm': '确定清空所有会话映射？这可能导致进行中的 AI 对话还原失败。',
     'sessions.cleared': '会话已清空',
     'sessions.clearFailed': '清空失败',
+    'sessions.deterministicOn': '稳定占位符：开启（跨进程一致）',
+    'sessions.deterministicOff': '稳定占位符：关闭（仅进程内一致）',
+    'sessions.deterministicHint': '开启后，占位符由 CA 派生密钥确定性生成，重启后仍保持一致。提示：切换不会自动重写已有映射。',
+    'sessions.deterministicUpdated': '占位符模式已更新',
+    'sessions.deterministicUpdateFailed': '更新失败',
     'certs.title': '证书管理',
     'certs.subtitle': 'CA 证书管理',
     'certs.caCert': 'CA 证书',
@@ -447,6 +452,11 @@ const i18n = {
     'sessions.clearConfirm': 'Clear all session mappings? This may break ongoing AI conversations.',
     'sessions.cleared': 'Sessions cleared',
     'sessions.clearFailed': 'Failed to clear sessions',
+    'sessions.deterministicOn': 'Deterministic placeholders: ON (stable across restarts)',
+    'sessions.deterministicOff': 'Deterministic placeholders: OFF (stable per process)',
+    'sessions.deterministicHint': 'When ON, placeholder tokens are derived from your CA key and remain stable across restarts. Note: switching will not rewrite existing mappings automatically.',
+    'sessions.deterministicUpdated': 'Placeholder mode updated',
+    'sessions.deterministicUpdateFailed': 'Update failed',
     'certs.title': 'Certificates',
     'certs.subtitle': 'CA certificate management',
     'certs.caCert': 'CA Certificate',
@@ -1817,17 +1827,68 @@ function closeModal() {
 async function addPattern(type, d) { try { await api.post('/patterns', { type: type, ...d }); toast(t('patterns.added')); await loadPatterns(); } catch (e) { toast(t('patterns.addFailed') + ': ' + e.message, 'error'); } }
 
 async function renderSessions() {
-  document.getElementById('main-content').innerHTML = '<div class="mb-8 flex justify-between items-start"><div><h2 class="text-2xl font-bold text-text">' + t('sessions.title') + '</h2><p class="text-muted mt-1">' + t('sessions.subtitle') + '</p></div><button class="btn btn-danger" onclick="clearSessions()">' + t('sessions.clearAll') + '</button></div><div class="card mb-6 p-4"><input type="text" id="session-search" placeholder="' + t('sessions.search') + '" class="w-full" oninput="searchSessions(this.value)"></div><div class="card"><div class="p-4 border-b border-border font-medium text-muted text-sm"><div class="grid grid-cols-3">' + t('sessions.placeholder') + ' / ' + t('sessions.category') + ' / ' + t('sessions.status') + '</div></div><div id="sessions-list"><div class="text-muted text-sm py-8 text-center">' + t('patterns.loading') + '</div></div></div>';
+  document.getElementById('main-content').innerHTML =
+    '<div class="mb-8 flex justify-between items-start">' +
+      '<div><h2 class="text-2xl font-bold text-text">' + t('sessions.title') + '</h2><p class="text-muted mt-1">' + t('sessions.subtitle') + '</p></div>' +
+      '<button class="btn btn-danger" onclick="clearSessions()">' + t('sessions.clearAll') + '</button>' +
+    '</div>' +
+    '<div class="card p-6 mb-6">' +
+      '<div class="flex justify-between items-start gap-6">' +
+        '<div>' +
+          '<div class="flex items-center gap-3">' +
+            '<div id="sessions-deterministic" class="tag tag-yellow inline-flex"></div>' +
+            '<label class="pill-switch" title="' + esc(t('sessions.deterministicHint')) + '">' +
+              '<input type="checkbox" id="sessions-deterministic-toggle" onchange="toggleDeterministicPlaceholders(this.checked)">' +
+              '<span class="pill-slider"></span>' +
+            '</label>' +
+          '</div>' +
+          '<div class="text-xs text-muted mt-2">' + t('sessions.deterministicHint') + '</div>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="card mb-6 p-4"><input type="text" id="session-search" placeholder="' + t('sessions.search') + '" class="w-full" oninput="searchSessions(this.value)"></div>' +
+    '<div class="card"><div class="p-4 border-b border-border font-medium text-muted text-sm"><div class="grid grid-cols-3">' + t('sessions.placeholder') + ' / ' + t('sessions.category') + ' / ' + t('sessions.status') + '</div></div><div id="sessions-list"><div class="text-muted text-sm py-8 text-center">' + t('patterns.loading') + '</div></div></div>';
   await loadSessions();
 }
-async function loadSessions(q) { try { state.sessions = await api.get(q ? '/sessions?search=' + encodeURIComponent(q) : '/sessions'); renderSessionsList(); } catch (e) { console.error(e); } }
+async function loadSessions(q) { try { state.sessions = await api.get(q ? '/sessions?search=' + encodeURIComponent(q) : '/sessions'); renderSessionsMeta(); renderSessionsList(); } catch (e) { console.error(e); } }
+function renderSessionsMeta() {
+  const el = document.getElementById('sessions-deterministic');
+  const toggle = document.getElementById('sessions-deterministic-toggle');
+  if (!el) return;
+  const on = !!(state.sessions && state.sessions.deterministic_placeholders);
+  el.textContent = on ? t('sessions.deterministicOn') : t('sessions.deterministicOff');
+  el.className = 'tag ' + (on ? 'tag-green' : 'tag-yellow') + ' inline-flex';
+  if (toggle) toggle.checked = on;
+}
 function renderSessionsList() {
   const l = document.getElementById('sessions-list');
-  if (state.sessions.mappings.length === 0) l.innerHTML = '<div class="text-muted text-sm py-8 text-center">' + t('sessions.noMappings') + '</div>';
-  else l.innerHTML = state.sessions.mappings.map(m => '<div class="table-row p-4 grid grid-cols-3 items-center"><code class="text-sm font-mono">' + esc(m.placeholder) + '</code><span class="tag tag-blue">' + esc(m.category) + '</span><span class="text-muted text-sm">' + t('sessions.protected') + '</span></div>').join('');
+  const mappings = (state.sessions && Array.isArray(state.sessions.mappings)) ? state.sessions.mappings : [];
+  if (mappings.length === 0) l.innerHTML = '<div class="text-muted text-sm py-8 text-center">' + t('sessions.noMappings') + '</div>';
+  else l.innerHTML = mappings.map(m => '<div class="table-row p-4 grid grid-cols-3 items-center"><code class="text-sm font-mono">' + esc(m.placeholder) + '</code><span class="tag tag-blue">' + esc(m.category) + '</span><span class="text-muted text-sm">' + t('sessions.protected') + '</span></div>').join('');
 }
 function searchSessions(v) { loadSessions(v); }
 async function clearSessions() { if (!confirm(t('sessions.clearConfirm'))) return; try { await api.del('/sessions'); toast(t('sessions.cleared')); await loadSessions(); } catch (e) { toast(t('sessions.clearFailed'), 'error'); } }
+let sessionsDeterministicBusy = false;
+async function toggleDeterministicPlaceholders(on) {
+  if (sessionsDeterministicBusy) return;
+  const prev = !!(state.sessions && state.sessions.deterministic_placeholders);
+  const next = !!on;
+  sessionsDeterministicBusy = true;
+  try {
+    const resp = await api.post('/sessions', { deterministic_placeholders: next });
+    if (!state.sessions) state.sessions = {};
+    state.sessions.deterministic_placeholders = !!(resp?.deterministic_placeholders ?? next);
+    renderSessionsMeta();
+    toast(t('sessions.deterministicUpdated'));
+  } catch (e) {
+    if (!state.sessions) state.sessions = {};
+    state.sessions.deterministic_placeholders = prev;
+    renderSessionsMeta();
+    toast(t('sessions.deterministicUpdateFailed') + ': ' + e.message, 'error');
+  } finally {
+    sessionsDeterministicBusy = false;
+  }
+}
 
 async function renderCerts() {
   document.getElementById('main-content').innerHTML = '<div class="mb-8"><h2 class="text-2xl font-bold text-text">' + t('certs.title') + '</h2><p class="text-muted mt-1">' + t('certs.subtitle') + '</p></div><div class="card p-6"><h3 class="font-semibold text-text mb-4">' + t('certs.caCert') + '</h3><div id="cert-info" class="space-y-3"><div class="text-muted text-sm py-4">' + t('patterns.loading') + '</div></div></div><div class="card p-6 mt-6"><h3 class="font-semibold text-text mb-4">' + t('certs.actions') + '</h3><div class="flex gap-4"><button id="cert-install-trust-btn" class="btn btn-primary" onclick="trustCert()">' + t('certs.installTrust') + '</button><button class="btn btn-danger" onclick="regenerateCert()">' + t('certs.regenerate') + '</button></div><p id="cert-trust-hint" class="text-muted text-sm mt-4">' + t('certs.trustHint') + '</p><p class="text-muted text-sm mt-2">' + t('certs.regenerateNote') + '</p></div>';
@@ -1863,6 +1924,7 @@ async function regenerateCert() { if (!confirm(t('certs.regenerateConfirm'))) re
 window.deletePattern = deletePattern;
 window.searchSessions = searchSessions;
 window.clearSessions = clearSessions;
+window.toggleDeterministicPlaceholders = toggleDeterministicPlaceholders;
 window.showAddRegex = showAddRegex;
 window.closeModal = closeModal;
 window.switchRuleType = switchRuleType;

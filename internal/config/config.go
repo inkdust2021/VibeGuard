@@ -58,10 +58,11 @@ type TargetConfig struct {
 
 // SessionConfig holds session management settings
 type SessionConfig struct {
-	TTL         string `yaml:"ttl"`
-	MaxMappings int    `yaml:"max_mappings"`
-	WALEnabled  bool   `yaml:"wal_enabled"`
-	WALPath     string `yaml:"wal_path"`
+	TTL                      string `yaml:"ttl"`
+	MaxMappings              int    `yaml:"max_mappings"`
+	WALEnabled               bool   `yaml:"wal_enabled"`
+	WALPath                  string `yaml:"wal_path"`
+	DeterministicPlaceholders bool   `yaml:"deterministic_placeholders"`
 }
 
 // LogConfig holds logging configuration
@@ -95,6 +96,7 @@ var defaultConfig = Config{
 		MaxMappings: 100000,
 		WALEnabled:  true,
 		WALPath:     "~/.vibeguard/session.wal",
+		DeterministicPlaceholders: false,
 	},
 	Log: LogConfig{
 		Level:     "info",

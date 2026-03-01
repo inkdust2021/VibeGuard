@@ -872,6 +872,21 @@ func looksLikeSSEPrefix(prefix []byte) bool {
 }
 
 func (s *Server) applyConfig(c config.Config) {
+	// 会话占位符生成模式：
+	// - 默认：进程内随机 key（仅进程内稳定）
+	// - 开启 deterministic_placeholders：使用 CA 派生 key（跨进程稳定）
+	if c.Session.DeterministicPlaceholders {
+		if key, err := s.ca.DerivePlaceholderKey(); err != nil {
+			slog.Warn("Failed to derive deterministic placeholder key; falling back to random placeholders", "error", err)
+			_ = s.session.SetDeterministicPlaceholders(false, nil)
+		} else if err := s.session.SetDeterministicPlaceholders(true, key); err != nil {
+			slog.Warn("Failed to enable deterministic placeholders; falling back to random placeholders", "error", err)
+			_ = s.session.SetDeterministicPlaceholders(false, nil)
+		}
+	} else {
+		_ = s.session.SetDeterministicPlaceholders(false, nil)
+	}
+
 	prefix := strings.TrimSpace(c.Proxy.PlaceholderPrefix)
 	if prefix == "" {
 		prefix = defaultPlaceholderPrefix
@@ -941,6 +956,7 @@ func (s *Server) ReloadFromConfig() {
 	slog.Info("Config reloaded",
 		"intercept_mode", rt.interceptMode,
 		"targets", len(rt.targets),
+		"deterministic_placeholders", c.Session.DeterministicPlaceholders,
 		"keywords", len(c.Patterns.Keywords),
 		"exclude", len(c.Patterns.Exclude),
 	)
