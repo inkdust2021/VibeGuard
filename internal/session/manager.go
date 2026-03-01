@@ -55,6 +55,14 @@ func NewManager(ttl time.Duration, maxSize int) *Manager {
 
 // Register adds a new mapping
 func (m *Manager) Register(placeholder, original string) {
+	m.register(placeholder, original, time.Now(), true)
+}
+
+func (m *Manager) register(placeholder, original string, createdAt time.Time, appendToWAL bool) {
+	if createdAt.IsZero() {
+		createdAt = time.Now()
+	}
+
 	m.mu.Lock()
 
 	// Check if already exists
@@ -68,14 +76,13 @@ func (m *Manager) Register(placeholder, original string) {
 		m.evictOldestLocked()
 	}
 
-	createdAt := time.Now()
 	m.forward[placeholder] = original
 	m.reverse[original] = placeholder
 	m.created[placeholder] = createdAt
 	wal := m.wal
 	m.mu.Unlock()
 
-	if wal != nil {
+	if appendToWAL && wal != nil {
 		if err := wal.Append(WALEntry{
 			Placeholder: placeholder,
 			Original:    original,

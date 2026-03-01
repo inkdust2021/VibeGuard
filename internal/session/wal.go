@@ -212,7 +212,10 @@ func (w *WAL) RestoreInto(m *Manager) error {
 		if time.Since(entry.CreatedAt) > m.ttl {
 			continue
 		}
-		m.Register(entry.Placeholder, entry.Original)
+		// 这里必须保留 WAL 中的 CreatedAt：
+		// - 否则重启后会把 mapping 的 createdAt 重置为 time.Now()，导致 TTL 被“续命”
+		// - 同时避免在恢复过程中再次 append WAL（即便调用方已提前 AttachWAL）
+		m.register(entry.Placeholder, entry.Original, entry.CreatedAt, false)
 	}
 
 	slog.Info("Restored mappings from WAL", "count", len(entries))
