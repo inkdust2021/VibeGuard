@@ -29,6 +29,8 @@ type AuditEvent struct {
 	Method      string `json:"method"`
 	Path        string `json:"path"`
 	ContentType string `json:"content_type"`
+	// ContentEncoding 为请求体的 Content-Encoding（空表示未压缩/未知）。
+	ContentEncoding string `json:"content_encoding,omitempty"`
 
 	// Attempted 表示本次请求是否进入“可脱敏文本内容”的扫描流程。
 	Attempted bool `json:"attempted"`

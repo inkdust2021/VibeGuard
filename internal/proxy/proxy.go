@@ -1,13 +1,18 @@
 package proxy
 
 import (
+	"bufio"
 	"bytes"
+	"compress/flate"
 	"compress/gzip"
+	"compress/zlib"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"mime"
 	"net"
 	"net/http"
 	"strings"
@@ -24,6 +29,7 @@ import (
 	"github.com/inkdust2021/vibeguard/internal/restore"
 	"github.com/inkdust2021/vibeguard/internal/session"
 	"github.com/inkdust2021/vibeguard/internal/stream"
+	"github.com/inkdust2021/vibeguard/internal/zstd"
 )
 
 const (
@@ -31,6 +37,8 @@ const (
 	defaultPlaceholderPrefix  = "__VG_"
 	defaultProxyInterceptMode = "global"
 )
+
+var errUnsupportedContentEncoding = errors.New("unsupported content-encoding")
 
 type runtimeConfig struct {
 	interceptMode string
@@ -51,6 +59,11 @@ type Server struct {
 	admin       *admin.Admin
 	certPath    string
 	keyPath     string
+}
+
+type auditCtx struct {
+	id       int64
+	redacted bool
 }
 
 // NewServer creates a new proxy server
@@ -385,20 +398,26 @@ func (s *Server) setupHandlers() {
 		host := requestHost(req)
 		method := ""
 		contentType := ""
+		contentEncoding := ""
 		if req != nil {
 			method = req.Method
 			contentType = req.Header.Get("Content-Type")
+			contentEncoding = strings.TrimSpace(req.Header.Get("Content-Encoding"))
 		}
 		auditEv := admin.AuditEvent{
-			Host:        host,
-			Method:      method,
-			Path:        safeRequestPath(req),
-			ContentType: contentType,
+			Host:            host,
+			Method:          method,
+			Path:            safeRequestPath(req),
+			ContentType:     contentType,
+			ContentEncoding: contentEncoding,
 		}
 		recordAudit := func() {
 			saved := s.admin.RecordAudit(auditEv)
 			if ctx != nil {
-				ctx.UserData = saved.ID
+				ctx.UserData = auditCtx{
+					id:       saved.ID,
+					redacted: auditEv.RedactedCount > 0,
+				}
 			}
 		}
 		if !s.shouldIntercept(host) {
@@ -416,16 +435,9 @@ func (s *Server) setupHandlers() {
 		// Handle request body redaction
 		if req.Body != nil && req.Body != http.NoBody && isTextContent(contentType) {
 			auditEv.Attempted = true
-			contentEncoding := strings.ToLower(strings.TrimSpace(req.Header.Get("Content-Encoding")))
-			if strings.Contains(contentEncoding, ",") {
-				// 多重编码暂不支持解压与脱敏；直接转发，避免破坏请求。
-				auditEv.Attempted = false
-				auditEv.Note = "encoded"
-				recordAudit()
-				return req, nil
-			}
-			if contentEncoding != "" && contentEncoding != "identity" && contentEncoding != "gzip" && contentEncoding != "br" && contentEncoding != "brotli" {
-				// 未知压缩：不做脱敏，避免在二进制数据上误命中并破坏请求。
+			contentEncodingHeader := req.Header.Get("Content-Encoding")
+			if !isSupportedContentEncodingHeader(contentEncodingHeader) {
+				// 未知/不支持的压缩：不做脱敏，避免在二进制数据上误命中并破坏请求。
 				auditEv.Attempted = false
 				auditEv.Note = "encoded"
 				recordAudit()
@@ -477,8 +489,8 @@ func (s *Server) setupHandlers() {
 
 			body := rawBody
 			// 若请求体带压缩编码，先解压后再做脱敏，并把请求改为“无压缩”转发（移除 Content-Encoding）。
-			if contentEncoding == "gzip" || contentEncoding == "br" || contentEncoding == "brotli" {
-				decoded, derr := decompressBytes(rawBody, contentEncoding, maxTextBodyBytes)
+			if strings.TrimSpace(contentEncodingHeader) != "" {
+				decoded, derr := decompressBytes(rawBody, contentEncodingHeader, maxTextBodyBytes)
 				if derr != nil {
 					// 解压失败：转发原始压缩体，避免中断业务请求。
 					req.Body = io.NopCloser(bytes.NewReader(rawBody))
@@ -583,9 +595,15 @@ func (s *Server) setupHandlers() {
 		}
 
 		contentType := resp.Header.Get("Content-Type")
-		var auditID int64
+		var (
+			auditID         int64
+			requestRedacted bool
+		)
 		if ctx != nil {
-			if v, ok := ctx.UserData.(int64); ok {
+			if v, ok := ctx.UserData.(auditCtx); ok {
+				auditID = v.id
+				requestRedacted = v.redacted
+			} else if v, ok := ctx.UserData.(int64); ok {
 				auditID = v
 			}
 		}
@@ -598,13 +616,36 @@ func (s *Server) setupHandlers() {
 
 		// Check for compression (defensive)
 		contentEncoding := resp.Header.Get("Content-Encoding")
+		decompressed := false
 		if contentEncoding != "" {
-			resp.Body = decompressBody(resp.Body, contentEncoding)
-			resp.Header.Del("Content-Encoding")
+			if decoded, ok := decompressBody(resp.Body, contentEncoding); ok {
+				resp.Body = decoded
+				resp.Header.Del("Content-Encoding")
+				decompressed = true
+			}
 		}
 
 		// Handle SSE streaming
-		if strings.Contains(contentType, "text/event-stream") {
+		isSSE := strings.Contains(contentType, "text/event-stream")
+		if !isSSE && requestRedacted && strings.TrimSpace(contentType) == "" && (contentEncoding == "" || decompressed) && resp.Body != nil {
+			// 有些上游会漏掉 Content-Type，但 body 实际仍是 SSE；这会导致无法跨 delta event 还原占位符。
+			// 这里在不泄露内容的前提下做轻量嗅探：只 peek 少量前缀，且不改变下游读取的数据。
+			origBody := resp.Body
+			br := bufio.NewReaderSize(origBody, 4096)
+			peek, _ := br.Peek(256)
+			resp.Body = &readerWithClose{r: br, c: origBody}
+			if looksLikeSSEPrefix(peek) {
+				isSSE = true
+				if auditID > 0 {
+					s.admin.UpdateAudit(auditID, func(ev *admin.AuditEvent) {
+						if strings.TrimSpace(ev.ResponseContentType) == "" {
+							ev.ResponseContentType = "text/event-stream (sniffed)"
+						}
+					})
+				}
+			}
+		}
+		if isSSE {
 			slog.Debug("SSE response detected", "host", host)
 			if auditID > 0 {
 				s.admin.UpdateAudit(auditID, func(ev *admin.AuditEvent) { ev.RestoreApplied = true })
@@ -616,7 +657,7 @@ func (s *Server) setupHandlers() {
 		}
 
 		// Handle JSON response
-		if strings.Contains(contentType, "application/json") {
+		if isJSONContentType(contentType) {
 			if resp.ContentLength > int64(maxTextBodyBytes) {
 				slog.Debug("Skip restore (response too large)", "host", host, "content_length", resp.ContentLength)
 				return resp
@@ -674,6 +715,29 @@ func (s *Server) setupHandlers() {
 			return resp
 		}
 
+		// Handle other text responses (plain text / markdown / html, etc.)
+		if isTextMediaType(contentType) {
+			if auditID > 0 {
+				s.admin.UpdateAudit(auditID, func(ev *admin.AuditEvent) { ev.RestoreApplied = true })
+			}
+			resp.Body = stream.NewRestoringReader(resp.Body, rt.restoreEng)
+			resp.ContentLength = -1
+			resp.Header.Del("Content-Length")
+			return resp
+		}
+
+		// Fallback: some upstreams omit Content-Type even for text responses.
+		// If the request had redactions, try restoring the response body anyway (only if it's not still encoded).
+		if requestRedacted && (contentEncoding == "" || decompressed) {
+			if auditID > 0 {
+				s.admin.UpdateAudit(auditID, func(ev *admin.AuditEvent) { ev.RestoreApplied = true })
+			}
+			resp.Body = stream.NewRestoringReader(resp.Body, rt.restoreEng)
+			resp.ContentLength = -1
+			resp.Header.Del("Content-Length")
+			return resp
+		}
+
 		return resp
 	})
 
@@ -716,6 +780,40 @@ func isTextContent(contentType string) bool {
 	return false
 }
 
+func isJSONContentType(contentType string) bool {
+	if strings.TrimSpace(contentType) == "" {
+		return false
+	}
+	mt, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		mt = contentType
+	}
+	mt = strings.ToLower(strings.TrimSpace(mt))
+	if mt == "" {
+		return false
+	}
+	if mt == "application/json" || mt == "text/json" {
+		return true
+	}
+	if strings.HasSuffix(mt, "+json") {
+		return true
+	}
+	// Some uncommon vendors use types like application/x-ndjson or application/json-seq.
+	return strings.Contains(mt, "json")
+}
+
+func isTextMediaType(contentType string) bool {
+	if strings.TrimSpace(contentType) == "" {
+		return false
+	}
+	mt, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		mt = contentType
+	}
+	mt = strings.ToLower(strings.TrimSpace(mt))
+	return strings.HasPrefix(mt, "text/")
+}
+
 func normalizeInterceptMode(mode string) string {
 	m := strings.ToLower(strings.TrimSpace(mode))
 	if m == "" {
@@ -727,6 +825,20 @@ func normalizeInterceptMode(mode string) string {
 	default:
 		return defaultProxyInterceptMode
 	}
+}
+
+func looksLikeSSEPrefix(prefix []byte) bool {
+	// SSE（Server-Sent Events）通常以 "data:" / "event:" 等字段开头。
+	// 一些上游/网关可能遗漏 Content-Type，此时可通过 body 前缀进行轻量嗅探。
+	b := bytes.TrimLeft(prefix, "\r\n\t ")
+	if len(b) == 0 {
+		return false
+	}
+	return bytes.HasPrefix(b, []byte("data:")) ||
+		bytes.HasPrefix(b, []byte("event:")) ||
+		bytes.HasPrefix(b, []byte("id:")) ||
+		bytes.HasPrefix(b, []byte("retry:")) ||
+		bytes.HasPrefix(b, []byte(":"))
 }
 
 func (s *Server) applyConfig(c config.Config) {
@@ -805,50 +917,112 @@ func (s *Server) ReloadFromConfig() {
 }
 
 // decompressBody decompresses response body based on Content-Encoding
-func decompressBody(body io.ReadCloser, encoding string) io.ReadCloser {
-	switch strings.ToLower(strings.TrimSpace(encoding)) {
-	case "gzip":
-		reader, err := gzip.NewReader(body)
-		if err != nil {
-			slog.Error("Failed to create gzip reader", "error", err)
-			return body
-		}
-		return &readerWithClose{
-			r: reader,
-			c: multiCloser{reader, body},
-		}
-	case "br", "brotli":
-		reader := brotli.NewReader(body)
-		return &readerWithClose{
-			r: reader,
-			c: body,
-		}
-	default:
-		return body
+func decompressBody(body io.ReadCloser, encoding string) (io.ReadCloser, bool) {
+	encodings := parseContentEncodings(encoding)
+	if len(encodings) == 0 {
+		return body, false
 	}
+
+	r := io.Reader(body)
+	closers := []io.Closer{body}
+
+	// Decode in reverse order.
+	for i := len(encodings) - 1; i >= 0; i-- {
+		enc := encodings[i]
+		switch enc {
+		case "", "identity":
+			continue
+		case "gzip":
+			gr, err := gzip.NewReader(r)
+			if err != nil {
+				return body, false
+			}
+			r = gr
+			closers = append(closers, gr)
+		case "br", "brotli":
+			r = brotli.NewReader(r)
+		case "deflate":
+			zr, err := zlib.NewReader(r)
+			if err == nil {
+				r = zr
+				closers = append(closers, zr)
+			} else {
+				fr := flate.NewReader(r)
+				r = fr
+				closers = append(closers, fr)
+			}
+		case "zstd":
+			r = zstd.NewReader(r)
+		default:
+			return body, false
+		}
+	}
+
+	return &readerWithClose{
+		r: r,
+		c: multiCloser(closers),
+	}, true
 }
 
 func decompressBytes(raw []byte, encoding string, limit int) ([]byte, error) {
-	enc := strings.ToLower(strings.TrimSpace(encoding))
-	if enc == "" || enc == "identity" {
+	encodings := parseContentEncodings(encoding)
+	if len(encodings) == 0 {
 		return raw, nil
 	}
 
-	var r io.Reader
-	switch enc {
-	case "gzip":
-		gr, err := gzip.NewReader(bytes.NewReader(raw))
+	out := raw
+	// Content-Encoding applies in order; to decode we must reverse the list.
+	for i := len(encodings) - 1; i >= 0; i-- {
+		enc := encodings[i]
+		if enc == "" || enc == "identity" {
+			continue
+		}
+
+		var (
+			reader io.Reader
+			closer io.Closer
+		)
+		switch enc {
+		case "gzip":
+			gr, err := gzip.NewReader(bytes.NewReader(out))
+			if err != nil {
+				return nil, err
+			}
+			reader = gr
+			closer = gr
+		case "br", "brotli":
+			reader = brotli.NewReader(bytes.NewReader(out))
+		case "deflate":
+			// HTTP "deflate" is historically ambiguous: try zlib wrapper first, then raw DEFLATE.
+			zr, err := zlib.NewReader(bytes.NewReader(out))
+			if err == nil {
+				reader = zr
+				closer = zr
+			} else {
+				fr := flate.NewReader(bytes.NewReader(out))
+				reader = fr
+				closer = fr
+			}
+		case "zstd":
+			reader = zstd.NewReader(bytes.NewReader(out))
+		default:
+			return nil, fmt.Errorf("%w: %s", errUnsupportedContentEncoding, enc)
+		}
+
+		decoded, err := readAllLimited(reader, limit)
+		if closer != nil {
+			_ = closer.Close()
+		}
 		if err != nil {
 			return nil, err
 		}
-		defer gr.Close()
-		r = gr
-	case "br", "brotli":
-		r = brotli.NewReader(bytes.NewReader(raw))
-	default:
-		return nil, fmt.Errorf("unsupported content-encoding: %s", encoding)
+		out = decoded
 	}
 
+	return out, nil
+}
+
+func readAllLimited(r io.Reader, limit int) ([]byte, error) {
 	limited := io.LimitReader(r, int64(limit)+1)
 	out, err := io.ReadAll(limited)
 	if err != nil {
@@ -858,6 +1032,40 @@ func decompressBytes(raw []byte, encoding string, limit int) ([]byte, error) {
 		return nil, fmt.Errorf("decompressed body too large")
 	}
 	return out, nil
+}
+
+func isSupportedContentEncodingHeader(headerVal string) bool {
+	for _, enc := range parseContentEncodings(headerVal) {
+		switch enc {
+		case "", "identity", "gzip", "br", "brotli", "deflate", "zstd":
+			continue
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func parseContentEncodings(headerVal string) []string {
+	if strings.TrimSpace(headerVal) == "" {
+		return nil
+	}
+	parts := strings.Split(headerVal, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		e := strings.ToLower(strings.TrimSpace(p))
+		if e == "" {
+			continue
+		}
+		if semi := strings.IndexByte(e, ';'); semi >= 0 {
+			e = strings.TrimSpace(e[:semi])
+		}
+		if e == "" {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
 }
 
 type readerWithClose struct {

@@ -314,7 +314,7 @@ const i18n = {
     'audit.note.too_large': '请求体过大',
     'audit.note.read_error': '读取失败',
     'audit.note.pass_through': '未拦截（配置直通）',
-    'audit.note.encoded': '请求体已压缩（跳过脱敏）',
+    'audit.note.encoded': '请求体压缩编码不支持（跳过脱敏）',
     'audit.note.decode_error': '解压失败（跳过脱敏）',
     'audit.note.invalid_json': '脱敏后 JSON 无效（已放弃脱敏）',
     'audit.note.not_utf8': '非 UTF-8 文本（跳过脱敏）',
@@ -327,6 +327,7 @@ const i18n = {
     'audit.detail.close': '关闭',
     'audit.detail.request': '请求',
     'audit.detail.contentType': 'Content-Type',
+    'audit.detail.contentEncoding': 'Content-Encoding',
     'audit.detail.responseStatus': '响应状态',
     'audit.detail.responseType': '响应 Content-Type',
     'audit.detail.restoreApplied': '响应还原',
@@ -505,7 +506,7 @@ const i18n = {
     'audit.note.too_large': 'Body too large',
     'audit.note.read_error': 'Read error',
     'audit.note.pass_through': 'Pass-through (not intercepted)',
-    'audit.note.encoded': 'Encoded body (skip redaction)',
+    'audit.note.encoded': 'Unsupported Content-Encoding (skip redaction)',
     'audit.note.decode_error': 'Decode error (skip redaction)',
     'audit.note.invalid_json': 'Invalid JSON after redaction (skipped)',
     'audit.note.not_utf8': 'Not UTF-8 (skip redaction)',
@@ -518,6 +519,7 @@ const i18n = {
     'audit.detail.close': 'Close',
     'audit.detail.request': 'Request',
     'audit.detail.contentType': 'Content-Type',
+    'audit.detail.contentEncoding': 'Content-Encoding',
     'audit.detail.responseStatus': 'Response status',
     'audit.detail.responseType': 'Response Content-Type',
     'audit.detail.restoreApplied': 'Restore applied',
@@ -1153,6 +1155,7 @@ function showAuditDetail(id) {
         '<div class="flex flex-wrap items-center gap-2">' + auditStatusTag(ev) + '</div>' +
         '<div class="text-sm"><span class="text-muted">' + t('audit.detail.request') + '</span><div class="mt-1"><code class="text-xs bg-white px-2 py-1 rounded border border-border break-all">' + esc(reqLine) + '</code></div></div>' +
         '<div class="text-sm"><span class="text-muted">' + t('audit.detail.contentType') + '</span><div class="mt-1"><code class="text-xs bg-white px-2 py-1 rounded border border-border break-all">' + esc(ct || '-') + '</code></div></div>' +
+        '<div class="text-sm"><span class="text-muted">' + t('audit.detail.contentEncoding') + '</span><div class="mt-1"><code class="text-xs bg-white px-2 py-1 rounded border border-border break-all">' + esc(ev.content_encoding || '-') + '</code></div></div>' +
         '<div class="text-sm"><span class="text-muted">' + t('audit.detail.responseStatus') + '</span><div class="mt-1"><code class="text-xs bg-white px-2 py-1 rounded border border-border break-all">' + esc(String(ev.response_status || '-')) + '</code></div></div>' +
         '<div class="text-sm"><span class="text-muted">' + t('audit.detail.responseType') + '</span><div class="mt-1"><code class="text-xs bg-white px-2 py-1 rounded border border-border break-all">' + esc(ev.response_content_type || '-') + '</code></div></div>' +
         '<div class="text-sm"><span class="text-muted">' + t('audit.detail.restoreApplied') + '</span><div class="mt-1">' + (ev.restore_applied ? '<span class="tag tag-green">' + t('certs.yes') + '</span>' : '<span class="tag tag-yellow">' + t('certs.no') + '</span>') + '</div></div>' +

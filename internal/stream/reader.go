@@ -175,9 +175,19 @@ func safeEmitCut(data []byte, eng *restore.Engine) int {
 	if len(data) == 0 || eng == nil {
 		return len(data)
 	}
-	prefix := []byte(eng.Prefix())
-	if len(prefix) == 0 {
+	prefixFullStr := eng.Prefix()
+	if prefixFullStr == "" {
 		return len(data)
+	}
+	prefixFull := []byte(prefixFullStr)
+	prefixBareStr := strings.TrimLeft(prefixFullStr, "_")
+	prefixBare := []byte(prefixBareStr)
+	if len(prefixBare) == 0 {
+		prefixBare = prefixFull
+	}
+	leadingUnderscores := len(prefixFullStr) - len(prefixBareStr)
+	if leadingUnderscores < 0 {
+		leadingUnderscores = 0
 	}
 
 	// 1) 处理“完整前缀已出现但占位符还没完整到达”的情况：保留从最后一个前缀开始到末尾。
@@ -185,23 +195,77 @@ func safeEmitCut(data []byte, eng *restore.Engine) int {
 	// 特别注意：占位符本身以 "__" 结尾，而 prefix 也以 "_" 开头，简单的“保留后缀前缀片段”
 	// 会误把占位符末尾 "__" 当作“下一个占位符前缀的开始”，从而把完整占位符拆开输出，导致无法还原。
 	// 因此这里优先判断“最后一个 prefix 是否已构成完整占位符且刚好到末尾”，若是则可直接输出全部。
-	last := bytes.LastIndex(data, prefix)
-	if last != -1 {
-		end, ok := eng.MatchAt(data, last)
-		if ok && end == len(data) {
+	lastBare := bytes.LastIndex(data, prefixBare)
+	if lastBare != -1 {
+		start := lastBare
+		// 若 bare 前面正好有 prefix 的前导下划线，把起点回退到完整 prefix，避免把 "__" 拆开输出。
+		if leadingUnderscores > 0 && lastBare >= leadingUnderscores {
+			all := true
+			for i := lastBare - leadingUnderscores; i < lastBare; i++ {
+				if data[i] != '_' {
+					all = false
+					break
+				}
+			}
+			if all {
+				start = lastBare - leadingUnderscores
+			}
+		}
+
+		end, ok := eng.MatchAt(data, start)
+		if ok {
+			// 注意：引擎为了兼容“模型丢掉尾部 __”的情况，允许占位符末尾 "__" 可选。
+			// 但在流式场景中，"__" 可能被拆到下一段输出；若此时提前输出并还原占位符，
+			// 下一段再到来的 "__" 就会作为普通文本残留（表现为原文后多出 "__"）。
+			//
+			// 因此当匹配到的占位符刚好贴着 buffer 末尾，且本段未包含尾部 "__" 时，先保留不输出，等待下一段补齐。
+			token := data[start:end]
+			hasSuffix := bytes.HasSuffix(token, []byte("__"))
+			const maxTail = 512
+
+			if end == len(data) {
+				if !hasSuffix && len(data)-start <= maxTail {
+					return start
+				}
+				return len(data)
+			}
+
+			// end < len(data)：后面还有数据。若剩余部分仅由 "_" 组成（常见于 "__" 被拆分），也需要保留。
+			if !hasSuffix && len(data)-start <= maxTail {
+				rem := data[end:]
+				if len(rem) > 0 && len(rem) <= 2 {
+					onlyUnderscore := true
+					for _, b := range rem {
+						if b != '_' {
+							onlyUnderscore = false
+							break
+						}
+					}
+					if onlyUnderscore {
+						return start
+					}
+				}
+			}
+
+			// 末尾的占位符已完整（且后面还有数据）：可以安全输出全部
 			return len(data)
 		}
 		if !ok {
 			// 最大保留长度：避免误把普通文本中的 "__VG_" 当作占位符导致无限缓存
 			const maxTail = 512
-			if len(data)-last <= maxTail {
-				return last
+			if len(data)-start <= maxTail {
+				return start
 			}
 		}
 	}
 
 	// 2) 处理“前缀被拆分到末尾”的情况：保留最长后缀（最多 len(prefix)-1）
-	partial := suffixPrefixLen(data, prefix)
+	partial := suffixPrefixLen(data, prefixFull)
+	if !bytes.Equal(prefixBare, prefixFull) {
+		if p := suffixPrefixLen(data, prefixBare); p > partial {
+			partial = p
+		}
+	}
 	cut := len(data) - partial
 
 	if cut < 0 {

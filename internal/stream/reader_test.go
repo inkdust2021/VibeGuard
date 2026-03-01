@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"strings"
 	"testing"
 	"time"
 
@@ -240,4 +241,76 @@ func TestSSERestoringReader_兼容AnthropicDelta嵌套结构(t *testing.T) {
 	}
 
 	t.Fatalf("未找到 content_block_delta 事件")
+}
+
+func TestSSERestoringReader_支持去掉前后下划线的占位符(t *testing.T) {
+	sess := session.NewManager(time.Hour, 1000)
+	t.Cleanup(sess.Close)
+
+	original := "test123"
+	placeholder := sess.GeneratePlaceholder(original, "TEXT", "__VG_")
+	sess.Register(placeholder, original)
+	eng := restore.NewEngine(sess, "__VG_")
+
+	// "__VG_TEXT_hash__" -> "VG_TEXT_hash"
+	stripped := strings.TrimSuffix(strings.TrimPrefix(placeholder, "__"), "__")
+
+	upstream := []byte(
+		"event: response.output_text.delta\n" +
+			"data: {\"type\":\"response.output_text.delta\",\"delta\":\"" + stripped + "\"}\n\n" +
+			"event: response.completed\n" +
+			"data: {\"type\":\"response.completed\"}\n\n",
+	)
+
+	reader := NewSSERestoringReader(&chunkReadCloser{data: upstream, chunks: []int{1, 2, 3, 4, 5, 8, 13, 21}}, eng)
+	out, err := io.ReadAll(reader)
+	if err != nil && err != io.EOF {
+		t.Fatalf("读取失败: %v", err)
+	}
+
+	got := collectDeltasFromSSE(t, out)
+	if got != original {
+		t.Fatalf("期望 delta 还原为 %q，实际：%q", original, got)
+	}
+	if bytes.Contains(out, []byte(stripped)) {
+		t.Fatalf("期望输出不再包含占位符变体 %q", stripped)
+	}
+}
+
+func TestSSERestoringReader_占位符尾部双下划线跨Delta不残留(t *testing.T) {
+	sess := session.NewManager(time.Hour, 1000)
+	t.Cleanup(sess.Close)
+
+	original := "test123"
+	placeholder := sess.GeneratePlaceholder(original, "TEXT", "__VG_")
+	sess.Register(placeholder, original)
+	eng := restore.NewEngine(sess, "__VG_")
+
+	// 模拟：占位符主体与尾部 "__" 被拆到两个 delta 里。
+	// 若流式切割不当，可能会先还原主体，再把 "__" 当普通文本输出，导致用户看到 "test123__"。
+	mainPart := strings.TrimSuffix(strings.TrimPrefix(placeholder, "__"), "__") // "VG_TEXT_xxx"
+	tail := "__"
+
+	upstream := []byte(
+		"event: response.output_text.delta\n" +
+			"data: {\"type\":\"response.output_text.delta\",\"delta\":\"" + mainPart + "\"}\n\n" +
+			"event: response.output_text.delta\n" +
+			"data: {\"type\":\"response.output_text.delta\",\"delta\":\"" + tail + "\"}\n\n" +
+			"event: response.completed\n" +
+			"data: {\"type\":\"response.completed\"}\n\n",
+	)
+
+	reader := NewSSERestoringReader(&chunkReadCloser{data: upstream, chunks: []int{7, 5, 3, 2, 11, 1, 2, 3}}, eng)
+	out, err := io.ReadAll(reader)
+	if err != nil && err != io.EOF {
+		t.Fatalf("读取失败: %v", err)
+	}
+
+	got := collectDeltasFromSSE(t, out)
+	if got != original {
+		t.Fatalf("期望 delta 还原为 %q，实际：%q", original, got)
+	}
+	if strings.Contains(got, "__") {
+		t.Fatalf("不应残留占位符尾部下划线，实际：%q", got)
+	}
 }

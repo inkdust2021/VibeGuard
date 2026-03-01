@@ -2,6 +2,7 @@ package restore
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 	"time"
 
@@ -85,5 +86,73 @@ func TestRestore_混合已知与未知占位符不应崩溃(t *testing.T) {
 	}
 	if !bytes.Contains(out, []byte(ph2)) {
 		t.Fatalf("期望未知占位符保持原样，输出：%q", string(out))
+	}
+}
+
+func TestRestore_支持去掉前后下划线的占位符(t *testing.T) {
+	sess := session.NewManager(time.Hour, 1000)
+	t.Cleanup(sess.Close)
+
+	original := "test123"
+	placeholder := sess.GeneratePlaceholder(original, "TEXT", "__VG_")
+	sess.Register(placeholder, original)
+
+	// "__VG_TEXT_hash__" -> "VG_TEXT_hash"
+	stripped := strings.TrimSuffix(strings.TrimPrefix(placeholder, "__"), "__")
+
+	eng := NewEngine(sess, "__VG_")
+	in := []byte("a " + stripped + " b")
+	out := eng.Restore(in)
+
+	if !bytes.Contains(out, []byte(original)) {
+		t.Fatalf("期望输出包含原文 %q，实际：%q", original, string(out))
+	}
+	if bytes.Contains(out, []byte(stripped)) {
+		t.Fatalf("期望输出不包含占位符变体 %q，实际：%q", stripped, string(out))
+	}
+}
+
+func TestRestore_支持缺失尾部双下划线的占位符(t *testing.T) {
+	sess := session.NewManager(time.Hour, 1000)
+	t.Cleanup(sess.Close)
+
+	original := "test123"
+	placeholder := sess.GeneratePlaceholder(original, "TEXT", "__VG_")
+	sess.Register(placeholder, original)
+
+	noSuffix := strings.TrimSuffix(placeholder, "__")
+
+	eng := NewEngine(sess, "__VG_")
+	in := []byte("a " + noSuffix + " b")
+	out := eng.Restore(in)
+
+	if !bytes.Contains(out, []byte(original)) {
+		t.Fatalf("期望输出包含原文 %q，实际：%q", original, string(out))
+	}
+	if bytes.Contains(out, []byte(noSuffix)) {
+		t.Fatalf("期望输出不包含占位符变体 %q，实际：%q", noSuffix, string(out))
+	}
+}
+
+func TestRestore_支持缺失前导下划线但保留尾部双下划线的占位符(t *testing.T) {
+	sess := session.NewManager(time.Hour, 1000)
+	t.Cleanup(sess.Close)
+
+	original := "test123"
+	placeholder := sess.GeneratePlaceholder(original, "TEXT", "__VG_")
+	sess.Register(placeholder, original)
+
+	// "__VG_TEXT_hash__" -> "VG_TEXT_hash__"
+	noLeading := strings.TrimPrefix(placeholder, "__")
+
+	eng := NewEngine(sess, "__VG_")
+	in := []byte("a " + noLeading + " b")
+	out := eng.Restore(in)
+
+	if !bytes.Contains(out, []byte(original)) {
+		t.Fatalf("期望输出包含原文 %q，实际：%q", original, string(out))
+	}
+	if bytes.Contains(out, []byte(noLeading)) {
+		t.Fatalf("期望输出不包含占位符变体 %q，实际：%q", noLeading, string(out))
 	}
 }
