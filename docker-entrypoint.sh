@@ -37,7 +37,7 @@ targets:
 patterns:
   keywords: []
   regex: []
-  builtin: ["china_id", "china_phone", "email", "uuid"]
+  builtin: []
   exclude: []
 YAML
 fi

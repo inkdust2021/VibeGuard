@@ -3,9 +3,7 @@ package session
 import (
 	"crypto/aes"
 	"crypto/cipher"
-	"crypto/ecdsa"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -26,23 +24,18 @@ type WALEntry struct {
 
 // WAL handles persistent storage of session mappings
 type WAL struct {
-	path       string
-	key        []byte
-	block      cipher.Block
-	gcm        cipher.AEAD
-	mu         sync.Mutex
-	file       *os.File
+	path string
+	gcm  cipher.AEAD
+	mu   sync.Mutex
+	file *os.File
 }
 
 // NewWAL creates a new WAL instance
-func NewWAL(path string, caKey *ecdsa.PrivateKey) (*WAL, error) {
-	// Derive encryption key from CA private key
-	keyBytes := caKey.D.Bytes()
-
-	// Use SHA-256 to get exactly 32 bytes for AES-256
-	hash := sha256.Sum256(keyBytes)
-	key := hash[:]
-
+func NewWAL(path string, key32 []byte) (*WAL, error) {
+	if len(key32) != 32 {
+		return nil, fmt.Errorf("WAL encryption key must be 32 bytes, got %d", len(key32))
+	}
+	key := append([]byte(nil), key32...)
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cipher: %w", err)
@@ -54,10 +47,8 @@ func NewWAL(path string, caKey *ecdsa.PrivateKey) (*WAL, error) {
 	}
 
 	wal := &WAL{
-		path:  path,
-		key:   key,
-		block: block,
-		gcm:   gcm,
+		path: path,
+		gcm:  gcm,
 	}
 
 	return wal, nil

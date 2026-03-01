@@ -229,9 +229,13 @@ func (e *Engine) RedactWithMatches(input []byte) ([]byte, []Match) {
 
 	for i := range planned {
 		m := &planned[i]
-		// Get or create placeholder
-		placeholder := e.session.GeneratePlaceholder(m.Original, m.Category, e.prefix)
-		e.session.Register(placeholder, m.Original)
+		// Reuse existing mapping first (important for WAL restore across restarts),
+		// otherwise generate and register a new placeholder.
+		placeholder, ok := e.session.LookupReverse(m.Original)
+		if !ok {
+			placeholder = e.session.GeneratePlaceholder(m.Original, m.Category, e.prefix)
+			e.session.Register(placeholder, m.Original)
+		}
 
 		m.Placeholder = placeholder
 
