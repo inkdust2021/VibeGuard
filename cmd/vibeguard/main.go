@@ -1017,6 +1017,10 @@ targets:
     enabled: true
   - host: api.openai.com
     enabled: true
+  - host: api2.cursor.sh
+    enabled: true
+  - host: generativelanguage.googleapis.com
+    enabled: true
 
 # 敏感信息匹配规则
 patterns:
@@ -1044,6 +1048,10 @@ targets:
   - host: api.anthropic.com
     enabled: true
   - host: api.openai.com
+    enabled: true
+  - host: api2.cursor.sh
+    enabled: true
+  - host: generativelanguage.googleapis.com
     enabled: true
 
 # Sensitive data patterns

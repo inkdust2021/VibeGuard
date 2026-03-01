@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"sync"
 	"time"
 )
@@ -21,6 +22,7 @@ type Manager struct {
 	maxSize  int
 	created  map[string]time.Time // placeholder -> creation time
 	stopChan chan struct{}
+	wal      *WAL
 	// secret 用于生成占位符的不可逆 token（避免把原文哈希直接暴露给上游）。
 	// 该值只存在于本进程内，不会写入配置/日志。
 	secret []byte
@@ -53,11 +55,19 @@ func NewManager(ttl time.Duration, maxSize int) *Manager {
 
 // Register adds a new mapping
 func (m *Manager) Register(placeholder, original string) {
+	m.register(placeholder, original, time.Now(), true)
+}
+
+func (m *Manager) register(placeholder, original string, createdAt time.Time, appendToWAL bool) {
+	if createdAt.IsZero() {
+		createdAt = time.Now()
+	}
+
 	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	// Check if already exists
 	if _, exists := m.reverse[original]; exists {
+		m.mu.Unlock()
 		return
 	}
 
@@ -68,7 +78,19 @@ func (m *Manager) Register(placeholder, original string) {
 
 	m.forward[placeholder] = original
 	m.reverse[original] = placeholder
-	m.created[placeholder] = time.Now()
+	m.created[placeholder] = createdAt
+	wal := m.wal
+	m.mu.Unlock()
+
+	if appendToWAL && wal != nil {
+		if err := wal.Append(WALEntry{
+			Placeholder: placeholder,
+			Original:    original,
+			CreatedAt:   createdAt,
+		}); err != nil {
+			slog.Warn("Failed to append session mapping to WAL", "error", err)
+		}
+	}
 }
 
 // Lookup returns the original value for a placeholder
@@ -124,10 +146,18 @@ func (m *Manager) Size() int {
 // Clear removes all mappings
 func (m *Manager) Clear() {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	m.forward = make(map[string]string)
 	m.reverse = make(map[string]string)
 	m.created = make(map[string]time.Time)
+	wal := m.wal
+	m.mu.Unlock()
+
+	if wal != nil {
+		if err := wal.Delete(); err != nil && !os.IsNotExist(err) {
+			slog.Warn("Failed to clear session WAL", "error", err)
+		}
+	}
+
 	slog.Debug("Session mapping cleared")
 }
 
@@ -138,6 +168,26 @@ func (m *Manager) Close() {
 		// Already closed
 	default:
 		close(m.stopChan)
+	}
+
+	m.mu.Lock()
+	wal := m.wal
+	m.wal = nil
+	m.mu.Unlock()
+	if wal != nil {
+		_ = wal.Close()
+	}
+}
+
+// AttachWAL binds a WAL instance for persisting newly registered mappings.
+func (m *Manager) AttachWAL(wal *WAL) {
+	m.mu.Lock()
+	old := m.wal
+	m.wal = wal
+	m.mu.Unlock()
+
+	if old != nil && old != wal {
+		_ = old.Close()
 	}
 }
 

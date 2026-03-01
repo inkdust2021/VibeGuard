@@ -15,6 +15,8 @@ import (
 	"mime"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -52,7 +54,6 @@ type Server struct {
 	proxy       *goproxy.ProxyHttpServer
 	config      *config.Manager
 	ca          *cert.CA
-	leafManager *cert.LeafCertManager
 	session     *session.Manager
 	listenAddr  string
 	runtime     atomic.Value // runtimeConfig
@@ -76,10 +77,25 @@ func NewServer(cfg *config.Manager, ca *cert.CA, certPath, keyPath string) (*Ser
 		sessTTL = time.Hour
 	}
 	sess := session.NewManager(sessTTL, c.Session.MaxMappings)
+	if c.Session.WALEnabled {
+		key, err := ca.DeriveStorageKey()
+		if err != nil {
+			return nil, fmt.Errorf("failed to derive WAL key: %w", err)
+		}
+
+		walPath := resolveSessionWALPath(c.Session.WALPath)
+		wal, err := session.NewWAL(walPath, key)
+		if err != nil {
+			return nil, fmt.Errorf("failed to init session WAL: %w", err)
+		}
+		if err := wal.RestoreInto(sess); err != nil {
+			slog.Warn("Failed to restore session WAL; continuing with empty in-memory mappings", "error", err, "path", walPath)
+		}
+		sess.AttachWAL(wal)
+	}
 
 	// Create goproxy
 	proxy := goproxy.NewProxyHttpServer()
-	leafManager := cert.NewLeafCertManager(ca)
 
 	// Configure transport
 	proxy.Tr = &http.Transport{
@@ -102,7 +118,6 @@ func NewServer(cfg *config.Manager, ca *cert.CA, certPath, keyPath string) (*Ser
 		proxy:       proxy,
 		config:      cfg,
 		ca:          ca,
-		leafManager: leafManager,
 		session:     sess,
 		listenAddr:  c.Proxy.Listen,
 		admin:       adm,
@@ -392,8 +407,14 @@ func jsonEscapeStringValue(s string) (string, error) {
 
 // setupHandlers configures request/response handlers
 func (s *Server) setupHandlers() {
+	stats := s.admin.GetStats()
+
 	// Request handler
 	s.proxy.OnRequest().DoFunc(func(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+		if req != nil && req.Method != http.MethodConnect {
+			stats.TotalRequests.Add(1)
+		}
+
 		rt := s.runtimeSnapshot()
 		host := requestHost(req)
 		method := ""
@@ -464,6 +485,7 @@ func (s *Server) setupHandlers() {
 				req.ContentLength = -1
 				req.Header.Del("Content-Length")
 				slog.Error("Failed to read request body", "error", err, "host", host)
+				stats.Errors.Add(1)
 				auditEv.Attempted = false
 				auditEv.Note = "read_error"
 				recordAudit()
@@ -498,6 +520,7 @@ func (s *Server) setupHandlers() {
 					req.Header.Set("Content-Length", fmt.Sprintf("%d", len(rawBody)))
 					req.TransferEncoding = nil
 					req.Header.Del("Transfer-Encoding")
+					stats.Errors.Add(1)
 					auditEv.Attempted = false
 					auditEv.Note = "decode_error"
 					recordAudit()
@@ -560,6 +583,7 @@ func (s *Server) setupHandlers() {
 			recordAudit()
 
 			if usedRedacted {
+				stats.RedactedRequests.Add(1)
 				slog.Info("Redacted sensitive data in request", "count", count, "host", host)
 			}
 
@@ -650,6 +674,7 @@ func (s *Server) setupHandlers() {
 			if auditID > 0 {
 				s.admin.UpdateAudit(auditID, func(ev *admin.AuditEvent) { ev.RestoreApplied = true })
 			}
+			stats.RestoredRequests.Add(1)
 			resp.Body = stream.NewSSERestoringReader(resp.Body, rt.restoreEng)
 			resp.ContentLength = -1
 			resp.Header.Del("Content-Length")
@@ -670,6 +695,7 @@ func (s *Server) setupHandlers() {
 				if auditID > 0 {
 					s.admin.UpdateAudit(auditID, func(ev *admin.AuditEvent) { ev.RestoreApplied = true })
 				}
+				stats.RestoredRequests.Add(1)
 				resp.Body = stream.NewRestoringReader(resp.Body, rt.restoreEng)
 				resp.ContentLength = -1
 				resp.Header.Del("Content-Length")
@@ -688,6 +714,7 @@ func (s *Server) setupHandlers() {
 				resp.ContentLength = -1
 				resp.Header.Del("Content-Length")
 				slog.Error("Failed to read response body", "error", err, "host", host)
+				stats.Errors.Add(1)
 				return resp
 			}
 			if len(body) > maxTextBodyBytes {
@@ -706,6 +733,7 @@ func (s *Server) setupHandlers() {
 			if auditID > 0 {
 				s.admin.UpdateAudit(auditID, func(ev *admin.AuditEvent) { ev.RestoreApplied = true })
 			}
+			stats.RestoredRequests.Add(1)
 			restored := rt.restoreEng.Restore(body)
 			resp.Body = io.NopCloser(bytes.NewReader(restored))
 			resp.ContentLength = int64(len(restored))
@@ -720,6 +748,7 @@ func (s *Server) setupHandlers() {
 			if auditID > 0 {
 				s.admin.UpdateAudit(auditID, func(ev *admin.AuditEvent) { ev.RestoreApplied = true })
 			}
+			stats.RestoredRequests.Add(1)
 			resp.Body = stream.NewRestoringReader(resp.Body, rt.restoreEng)
 			resp.ContentLength = -1
 			resp.Header.Del("Content-Length")
@@ -732,6 +761,7 @@ func (s *Server) setupHandlers() {
 			if auditID > 0 {
 				s.admin.UpdateAudit(auditID, func(ev *admin.AuditEvent) { ev.RestoreApplied = true })
 			}
+			stats.RestoredRequests.Add(1)
 			resp.Body = stream.NewRestoringReader(resp.Body, rt.restoreEng)
 			resp.ContentLength = -1
 			resp.Header.Del("Content-Length")
@@ -1066,6 +1096,25 @@ func parseContentEncodings(headerVal string) []string {
 		out = append(out, e)
 	}
 	return out
+}
+
+func resolveSessionWALPath(path string) string {
+	p := strings.TrimSpace(path)
+	if p == "" {
+		return filepath.Join(config.GetConfigDir(), "session.wal")
+	}
+	if p == "~" {
+		if home, err := os.UserHomeDir(); err == nil && strings.TrimSpace(home) != "" {
+			return home
+		}
+		return p
+	}
+	if strings.HasPrefix(p, "~/") || strings.HasPrefix(p, "~"+string(os.PathSeparator)) {
+		if home, err := os.UserHomeDir(); err == nil && strings.TrimSpace(home) != "" {
+			return filepath.Join(home, p[2:])
+		}
+	}
+	return p
 }
 
 type readerWithClose struct {
