@@ -8,7 +8,7 @@
 #
 # 可选 / Optional:
 # - -Purge 删除 ~/.vibeguard（配置/证书/日志/WAL） / Remove ~/.vibeguard
-# - -RemovePath 从用户 PATH 移除安装目录（谨慎） / Remove install dir from user PATH (careful)
+# - -RemovePath 从用户 PATH 移除安装目录 / Remove install dir from user PATH
 
 param(
   [string]$InstallDir = (Join-Path $HOME ".local\\bin"),

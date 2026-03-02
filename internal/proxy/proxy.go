@@ -27,6 +27,10 @@ import (
 	"github.com/inkdust2021/vibeguard/internal/admin"
 	"github.com/inkdust2021/vibeguard/internal/cert"
 	"github.com/inkdust2021/vibeguard/internal/config"
+	"github.com/inkdust2021/vibeguard/internal/pii_next/keywords"
+	"github.com/inkdust2021/vibeguard/internal/pii_next/pipeline"
+	"github.com/inkdust2021/vibeguard/internal/pii_next/presidio"
+	piirec "github.com/inkdust2021/vibeguard/internal/pii_next/recognizer"
 	"github.com/inkdust2021/vibeguard/internal/redact"
 	"github.com/inkdust2021/vibeguard/internal/restore"
 	"github.com/inkdust2021/vibeguard/internal/session"
@@ -45,21 +49,21 @@ var errUnsupportedContentEncoding = errors.New("unsupported content-encoding")
 type runtimeConfig struct {
 	interceptMode string
 	targets       map[string]bool
-	redactEng     *redact.Engine
+	redactEng     redact.Redactor
 	restoreEng    *restore.Engine
 }
 
 // Server represents the MITM proxy server
 type Server struct {
-	proxy       *goproxy.ProxyHttpServer
-	config      *config.Manager
-	ca          *cert.CA
-	session     *session.Manager
-	listenAddr  string
-	runtime     atomic.Value // runtimeConfig
-	admin       *admin.Admin
-	certPath    string
-	keyPath     string
+	proxy      *goproxy.ProxyHttpServer
+	config     *config.Manager
+	ca         *cert.CA
+	session    *session.Manager
+	listenAddr string
+	runtime    atomic.Value // runtimeConfig
+	admin      *admin.Admin
+	certPath   string
+	keyPath    string
 }
 
 type auditCtx struct {
@@ -115,14 +119,14 @@ func NewServer(cfg *config.Manager, ca *cert.CA, certPath, keyPath string) (*Ser
 	adm := admin.New(cfg, sess, ca, certPath, keyPath)
 
 	server := &Server{
-		proxy:       proxy,
-		config:      cfg,
-		ca:          ca,
-		session:     sess,
-		listenAddr:  c.Proxy.Listen,
-		admin:       adm,
-		certPath:    certPath,
-		keyPath:     keyPath,
+		proxy:      proxy,
+		config:     cfg,
+		ca:         ca,
+		session:    sess,
+		listenAddr: c.Proxy.Listen,
+		admin:      adm,
+		certPath:   certPath,
+		keyPath:    keyPath,
 	}
 	server.applyConfig(c)
 
@@ -298,7 +302,7 @@ func previewValue(s string, head, tail int) string {
 	return string(r[:head]) + "…" + string(r[n-tail:])
 }
 
-func redactJSONBody(redactEng *redact.Engine, body []byte) (out []byte, matches []redact.Match, changed bool, err error) {
+func redactJSONBody(redactEng redact.Redactor, body []byte) (out []byte, matches []redact.Match, changed bool, err error) {
 	// 仅在 body 为合法 JSON 时尝试结构化脱敏；否则由上层回退到“整段文本脱敏”逻辑。
 	dec := json.NewDecoder(bytes.NewReader(body))
 	dec.UseNumber()
@@ -327,7 +331,7 @@ func redactJSONBody(redactEng *redact.Engine, body []byte) (out []byte, matches 
 	return out, matches, true, nil
 }
 
-func redactJSONValue(redactEng *redact.Engine, v any) (out any, matches []redact.Match, changed bool, err error) {
+func redactJSONValue(redactEng redact.Redactor, v any) (out any, matches []redact.Match, changed bool, err error) {
 	switch vv := v.(type) {
 	case string:
 		escaped, err := jsonEscapeStringValue(vv)
@@ -892,7 +896,10 @@ func (s *Server) applyConfig(c config.Config) {
 		prefix = defaultPlaceholderPrefix
 	}
 
-	redactEng := redact.NewEngine(s.session, prefix)
+	var (
+		kws     []keywords.Keyword
+		exclude []string
+	)
 	for _, kw := range c.Patterns.Keywords {
 		val := config.SanitizePatternValue(kw.Value)
 		if val == "" {
@@ -902,23 +909,51 @@ func (s *Server) applyConfig(c config.Config) {
 		if cat == "" {
 			cat = "TEXT"
 		}
-		redactEng.AddKeyword(val, cat)
+		kws = append(kws, keywords.Keyword{Text: val, Category: cat})
 	}
 	for _, ex := range c.Patterns.Exclude {
 		ex = config.SanitizePatternValue(ex)
 		if ex == "" {
 			continue
 		}
-		redactEng.AddExclude(ex)
+		exclude = append(exclude, ex)
 	}
 
 	// 当前版本管理页仅支持关键词匹配；若用户配置了 regex/builtin，提示但不启用，
 	// 避免“过宽正则误伤整段文本”的情况。
 	if len(c.Patterns.Regex) > 0 || len(c.Patterns.Builtin) > 0 {
-		slog.Warn("Ignoring regex/builtin patterns; only keywords are enabled",
+		slog.Warn("Ignoring regex/builtin patterns; only keywords (and optional Presidio) are enabled",
 			"regex", len(c.Patterns.Regex),
 			"builtin", len(c.Patterns.Builtin),
 		)
+	}
+
+	var redactor redact.Redactor
+	if c.Patterns.Presidio.Enabled {
+		var merged []piirec.Recognizer
+		// 关键词：合并为一个 recognizer，避免重复扫描。
+		if len(kws) > 0 {
+			merged = append(merged, keywords.New(kws))
+		}
+
+		presidioRecs, unknown := presidio.NewRecognizers(c.Patterns.Presidio.Recognizers)
+		if len(unknown) > 0 {
+			slog.Warn("Unknown Presidio recognizers ignored", "unknown", unknown)
+		}
+		merged = append(merged, presidioRecs...)
+
+		p := pipeline.New(s.session, prefix, merged...)
+		p.SetExclude(exclude)
+		redactor = p
+	} else {
+		redactEng := redact.NewEngine(s.session, prefix)
+		for _, kw := range kws {
+			redactEng.AddKeyword(kw.Text, kw.Category)
+		}
+		for _, ex := range exclude {
+			redactEng.AddExclude(ex)
+		}
+		redactor = redactEng
 	}
 
 	targets := make(map[string]bool)
@@ -937,7 +972,7 @@ func (s *Server) applyConfig(c config.Config) {
 	s.runtime.Store(runtimeConfig{
 		interceptMode: interceptMode,
 		targets:       targets,
-		redactEng:     redactEng,
+		redactEng:     redactor,
 		restoreEng:    restore.NewEngine(s.session, prefix),
 	})
 }
@@ -958,6 +993,7 @@ func (s *Server) ReloadFromConfig() {
 		"targets", len(rt.targets),
 		"deterministic_placeholders", c.Session.DeterministicPlaceholders,
 		"keywords", len(c.Patterns.Keywords),
+		"presidio_enabled", c.Patterns.Presidio.Enabled,
 		"exclude", len(c.Patterns.Exclude),
 	)
 }

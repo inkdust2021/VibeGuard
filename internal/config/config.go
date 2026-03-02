@@ -36,6 +36,14 @@ type PatternsConfig struct {
 	Regex    []RegexPattern   `yaml:"regex"`
 	Builtin  []string         `yaml:"builtin"`
 	Exclude  []string         `yaml:"exclude"`
+	// Presidio 为“泛化 PII 识别”开关与配置（纯 Go 内置，无需外部 HTTP）。
+	Presidio PresidioConfig `yaml:"presidio"`
+}
+
+// PresidioConfig controls the built-in Presidio-style recognizers.
+type PresidioConfig struct {
+	Enabled     bool     `yaml:"enabled"`
+	Recognizers []string `yaml:"recognizers"`
 }
 
 // KeywordPattern represents a keyword to match
@@ -58,10 +66,10 @@ type TargetConfig struct {
 
 // SessionConfig holds session management settings
 type SessionConfig struct {
-	TTL                      string `yaml:"ttl"`
-	MaxMappings              int    `yaml:"max_mappings"`
-	WALEnabled               bool   `yaml:"wal_enabled"`
-	WALPath                  string `yaml:"wal_path"`
+	TTL                       string `yaml:"ttl"`
+	MaxMappings               int    `yaml:"max_mappings"`
+	WALEnabled                bool   `yaml:"wal_enabled"`
+	WALPath                   string `yaml:"wal_path"`
 	DeterministicPlaceholders bool   `yaml:"deterministic_placeholders"`
 }
 
@@ -84,6 +92,10 @@ var defaultConfig = Config{
 		Regex:    []RegexPattern{},
 		Builtin:  []string{},
 		Exclude:  []string{},
+		Presidio: PresidioConfig{
+			Enabled:     false,
+			Recognizers: []string{},
+		},
 	},
 	Targets: []TargetConfig{
 		{Host: "api.anthropic.com", Enabled: true},
@@ -92,10 +104,10 @@ var defaultConfig = Config{
 		{Host: "generativelanguage.googleapis.com", Enabled: true},
 	},
 	Session: SessionConfig{
-		TTL:         "1h",
-		MaxMappings: 100000,
-		WALEnabled:  true,
-		WALPath:     "~/.vibeguard/session.wal",
+		TTL:                       "1h",
+		MaxMappings:               100000,
+		WALEnabled:                true,
+		WALPath:                   "~/.vibeguard/session.wal",
 		DeterministicPlaceholders: false,
 	},
 	Log: LogConfig{
@@ -325,6 +337,19 @@ func sanitizeLoadedConfig(cfg *Config) {
 		cfg.Patterns.Builtin = out
 	}
 
+	// Patterns: presidio
+	if len(cfg.Patterns.Presidio.Recognizers) > 0 {
+		out := make([]string, 0, len(cfg.Patterns.Presidio.Recognizers))
+		for _, n := range cfg.Patterns.Presidio.Recognizers {
+			v := SanitizeRecognizerName(n)
+			if v == "" {
+				continue
+			}
+			out = append(out, v)
+		}
+		cfg.Patterns.Presidio.Recognizers = out
+	}
+
 	// Targets
 	if len(cfg.Targets) > 0 {
 		out := make([]TargetConfig, 0, len(cfg.Targets))
@@ -479,6 +504,15 @@ func mergeConfigs(global, project Config) Config {
 	// Merge exclude patterns (append, not replace)
 	if len(project.Patterns.Exclude) > 0 {
 		result.Patterns.Exclude = append(result.Patterns.Exclude, project.Patterns.Exclude...)
+	}
+
+	// Presidio: project-level settings can enable and/or override recognizers list.
+	if project.Patterns.Presidio.Enabled {
+		result.Patterns.Presidio.Enabled = true
+	}
+	if len(project.Patterns.Presidio.Recognizers) > 0 {
+		// Recognizers 列表更适合“覆盖”而不是 append，避免跨项目叠加造成困惑。
+		result.Patterns.Presidio.Recognizers = append([]string(nil), project.Patterns.Presidio.Recognizers...)
 	}
 
 	// Merge targets (append, not replace)

@@ -16,7 +16,7 @@ VibeGuard is a MITM HTTPS proxy for protecting sensitive data when vibecoding.
 
 ## Key Features
 
-- **Redaction rules**: keywords only (exact substring match; only the matched substring is replaced).
+- **Redaction rules**: keyword rules (exact substring match) + optional built-in generic PII recognizers (email/phone/credit card/IBAN/SSN/IP/UUID, etc).
 - **Safe by default**: only scans text-like bodies (e.g., `application/json`) up to 10MB.
 - **Admin UI**: manage rules, certificates, sessions, per-request “redaction hit” events at `/manager/`, and tail debug logs at `#/logs`.
 - **Admin auth**: the admin UI/API is protected by a password (set on first visit to `/manager/`).

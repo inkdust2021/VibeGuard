@@ -200,7 +200,26 @@ const i18n = {
     'dashboard.maxMappings': '最大映射数',
     'dashboard.utilization': '使用率',
     'patterns.title': '匹配规则',
-    'patterns.subtitle': '只对“关键词本身”做替换（不支持正则/模板）',
+    'patterns.subtitle': '在这里配置关键词规则与排除项。',
+    'presidio.title': '泛化匹配（Presidio）',
+    'presidio.subtitle': '无需正则，自动识别常见敏感信息（可与关键词同时使用）',
+    'presidio.hint': '开启后会额外识别邮箱、电话、信用卡号、IBAN、SSN、IP、UUID 等，并替换为占位符。',
+    'presidio.recognizers': '识别类型',
+    'presidio.atLeastOne': '请至少选择一种识别类型',
+    'presidio.rec.email': '邮箱',
+    'presidio.rec.phone': '电话',
+    'presidio.rec.url': 'URL',
+    'presidio.rec.ip': 'IP（v4/v6）',
+    'presidio.rec.mac': 'MAC',
+    'presidio.rec.uuid': 'UUID',
+    'presidio.rec.credit_card': '信用卡（Luhn 校验）',
+    'presidio.rec.iban': 'IBAN（校验）',
+    'presidio.rec.ssn': 'SSN',
+    'presidio.rec.crypto': '加密地址（BTC/ETH）',
+    'presidio.on': '已开启',
+    'presidio.off': '已关闭',
+    'presidio.updated': 'Presidio 设置已更新',
+    'presidio.updateFailed': 'Presidio 设置更新失败',
     'patterns.regex': '关键词',
     'patterns.add': '添加',
     'patterns.noRegex': '未配置关键词',
@@ -397,7 +416,26 @@ const i18n = {
     'dashboard.maxMappings': 'Max Mappings',
     'dashboard.utilization': 'Utilization',
     'patterns.title': 'Patterns',
-    'patterns.subtitle': 'Replace only the keyword itself (no regex/presets)',
+    'patterns.subtitle': 'Manage keyword rules and exclusions.',
+    'presidio.title': 'Generic PII (Presidio)',
+    'presidio.subtitle': 'No regex needed; detects common PII alongside keywords',
+    'presidio.hint': 'When enabled, it additionally detects emails, phones, credit cards, IBAN, SSN, IP, UUID, etc. and replaces them with placeholders.',
+    'presidio.recognizers': 'Recognizers',
+    'presidio.atLeastOne': 'Select at least one recognizer',
+    'presidio.rec.email': 'Email',
+    'presidio.rec.phone': 'Phone',
+    'presidio.rec.url': 'URL',
+    'presidio.rec.ip': 'IP (v4/v6)',
+    'presidio.rec.mac': 'MAC',
+    'presidio.rec.uuid': 'UUID',
+    'presidio.rec.credit_card': 'Credit card (Luhn)',
+    'presidio.rec.iban': 'IBAN (checksum)',
+    'presidio.rec.ssn': 'SSN',
+    'presidio.rec.crypto': 'Crypto (BTC/ETH)',
+    'presidio.on': 'Enabled',
+    'presidio.off': 'Disabled',
+    'presidio.updated': 'Presidio settings updated',
+    'presidio.updateFailed': 'Failed to update Presidio',
     'patterns.regex': 'Keywords',
     'patterns.add': '+ Add',
     'patterns.noRegex': 'No keywords configured',
@@ -623,7 +661,7 @@ async function initLang() {
   applyLang(saved || 'zh');
 }
 
-const state = { stats: { proxy: {}, session: {}, requests: {} }, patterns: { keywords: [], regex: [], builtin: [], exclude: [] }, sessions: { total: 0, mappings: [] }, certs: { ca: {} }, audit: { redact_log: true, max_events: 200, events: [] }, logs: { configured_path: '', effective_path: '', exists: false, lines: [], warning: '' } };
+const state = { stats: { proxy: {}, session: {}, requests: {} }, patterns: { keywords: [], regex: [], builtin: [], exclude: [] }, presidio: { enabled: false, recognizers: [] }, sessions: { total: 0, mappings: [] }, certs: { ca: {} }, audit: { redact_log: true, max_events: 200, events: [] }, logs: { configured_path: '', effective_path: '', exists: false, lines: [], warning: '' } };
 state.auth = { configured: false, authenticated: false, broken: false, broken_error: '' };
 let auditES = null;
 let logsES = null;
@@ -1447,7 +1485,33 @@ async function renderLogs() {
 }
 
 async function renderPatterns() {
-  document.getElementById('main-content').innerHTML = '<div class="mb-8"><h2 class="text-2xl font-bold text-text">' + t('patterns.title') + '</h2><p class="text-muted mt-1">' + t('patterns.subtitle') + '</p></div><div class="card p-6"><div class="flex justify-between items-center mb-4"><h3 class="font-semibold text-text">' + t('patterns.regex') + '</h3><button class="btn btn-primary text-sm" onclick="showAddKeyword()">' + t('patterns.add') + '</button></div><div id="keywords-list" class="space-y-2"><div class="text-muted text-sm py-4 text-center">' + t('patterns.loading') + '</div></div></div>';
+  document.getElementById('main-content').innerHTML =
+    '<div class="mb-8"><h2 class="text-2xl font-bold text-text">' + t('patterns.title') + '</h2><p class="text-muted mt-1">' + t('patterns.subtitle') + '</p></div>' +
+    '<div class="card p-6 mb-6">' +
+      '<div class="flex justify-between items-start gap-6">' +
+        '<div>' +
+          '<h3 class="font-semibold text-text">' + t('presidio.title') + '</h3>' +
+          '<div class="text-xs text-muted mt-1">' + t('presidio.subtitle') + '</div>' +
+        '</div>' +
+        '<div class="flex items-center gap-3">' +
+          '<div id="presidio-status" class="tag tag-yellow inline-flex"></div>' +
+          '<label class="pill-switch" title="' + esc(t('presidio.hint')) + '">' +
+            '<input type="checkbox" id="presidio-toggle" onchange="togglePresidio(this.checked)">' +
+            '<span class="pill-slider"></span>' +
+          '</label>' +
+        '</div>' +
+      '</div>' +
+      '<div class="text-xs text-muted mt-3">' + t('presidio.hint') + '</div>' +
+      '<div class="mt-4">' +
+        '<div class="text-sm font-medium text-text mb-2">' + t('presidio.recognizers') + '</div>' +
+        '<div id="presidio-recognizers" class="grid grid-cols-1 md:grid-cols-2 gap-2"></div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="card p-6">' +
+      '<div class="flex justify-between items-center mb-4"><h3 class="font-semibold text-text">' + t('patterns.regex') + '</h3><button class="btn btn-primary text-sm" onclick="showAddKeyword()">' + t('patterns.add') + '</button></div>' +
+      '<div id="keywords-list" class="space-y-2"><div class="text-muted text-sm py-4 text-center">' + t('patterns.loading') + '</div></div>' +
+    '</div>';
+  await loadPresidio();
   await loadPatterns();
 }
 async function loadPatterns() { try { state.patterns = normalizePatterns(await api.get('/patterns')); renderPatternsLists(); } catch (e) { console.error(e); } }
@@ -1458,6 +1522,108 @@ function renderPatternsLists() {
   else re.innerHTML = list.map((k, i) => '<div class="pattern-item flex justify-between items-center p-3 bg-surface rounded-lg"><div class="flex items-center gap-2"><code class="text-sm bg-white px-2 py-1 rounded">' + esc(k.value) + '</code><span class="tag tag-blue">' + esc(k.category || 'TEXT') + '</span></div><button class="delete-btn text-muted hover:text-danger" onclick="deletePattern(\'keywords\',' + i + ')"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button></div>').join('');
 }
 async function deletePattern(type, idx) { if (!confirm(t('patterns.deleteConfirm'))) return; try { await api.del('/patterns/' + type + '/' + idx); toast(t('patterns.deleted')); await loadPatterns(); } catch (e) { toast(t('patterns.deleteFailed') + ': ' + e.message, 'error'); } }
+
+async function loadPresidio() { try { state.presidio = await api.get('/presidio'); renderPresidioMeta(); } catch (e) { console.error(e); } }
+function renderPresidioMeta() {
+  const el = document.getElementById('presidio-status');
+  const toggle = document.getElementById('presidio-toggle');
+  if (!el) return;
+  const on = !!(state.presidio && state.presidio.enabled);
+  el.textContent = on ? t('presidio.on') : t('presidio.off');
+  el.className = 'tag ' + (on ? 'tag-green' : 'tag-yellow') + ' inline-flex';
+  if (toggle) toggle.checked = on;
+  renderPresidioRecognizers();
+}
+let presidioBusy = false;
+async function togglePresidio(on) {
+  if (presidioBusy) return;
+  const prev = !!(state.presidio && state.presidio.enabled);
+  const next = !!on;
+  presidioBusy = true;
+  try {
+    const resp = await api.post('/presidio', { enabled: next });
+    if (!state.presidio) state.presidio = {};
+    state.presidio.enabled = !!(resp?.enabled ?? next);
+    state.presidio.recognizers = Array.isArray(resp?.recognizers) ? resp.recognizers : (state.presidio.recognizers || []);
+    renderPresidioMeta();
+    toast(t('presidio.updated'));
+  } catch (e) {
+    if (!state.presidio) state.presidio = {};
+    state.presidio.enabled = prev;
+    renderPresidioMeta();
+    toast(t('presidio.updateFailed') + ': ' + e.message, 'error');
+  } finally {
+    presidioBusy = false;
+  }
+}
+
+const PRESIDIO_RECOGNIZER_OPTIONS = [
+  { key: 'email', label: 'presidio.rec.email' },
+  { key: 'credit_card', label: 'presidio.rec.credit_card' },
+  { key: 'iban', label: 'presidio.rec.iban' },
+  { key: 'ssn', label: 'presidio.rec.ssn' },
+  { key: 'crypto', label: 'presidio.rec.crypto' },
+  { key: 'ip', label: 'presidio.rec.ip' },
+  { key: 'mac', label: 'presidio.rec.mac' },
+  { key: 'uuid', label: 'presidio.rec.uuid' },
+  { key: 'url', label: 'presidio.rec.url' },
+  { key: 'phone', label: 'presidio.rec.phone' }
+];
+
+function effectivePresidioRecognizers() {
+  const list = Array.isArray(state.presidio?.recognizers) ? state.presidio.recognizers : [];
+  if (list.includes('all')) return PRESIDIO_RECOGNIZER_OPTIONS.map(o => o.key);
+  return list;
+}
+
+function renderPresidioRecognizers() {
+  const box = document.getElementById('presidio-recognizers');
+  if (!box) return;
+  const selected = new Set(effectivePresidioRecognizers());
+  box.innerHTML = PRESIDIO_RECOGNIZER_OPTIONS.map(o =>
+    '<label class="flex items-start gap-3 p-3 bg-surface rounded-lg cursor-pointer hover:bg-surface/70">' +
+      '<input type="checkbox" class="mt-1" id="presidio-rec-' + esc(o.key) + '" ' + (selected.has(o.key) ? 'checked' : '') + ' onchange="updatePresidioRecognizers()">' +
+      '<div><div class="text-sm text-text font-medium">' + t(o.label) + '</div></div>' +
+    '</label>'
+  ).join('');
+}
+
+async function updatePresidioRecognizers() {
+  if (presidioBusy) return;
+  const prev = effectivePresidioRecognizers();
+  const selected = PRESIDIO_RECOGNIZER_OPTIONS
+    .filter(o => document.getElementById('presidio-rec-' + o.key)?.checked)
+    .map(o => o.key);
+
+  if (selected.length === 0) {
+    toast(t('presidio.atLeastOne'), 'error');
+    // 恢复上一次选择
+    if (!state.presidio) state.presidio = {};
+    state.presidio.recognizers = prev;
+    renderPresidioRecognizers();
+    return;
+  }
+
+  // 全选时用 all 简化配置
+  const payload = { recognizers: (selected.length === PRESIDIO_RECOGNIZER_OPTIONS.length) ? ['all'] : selected };
+
+  presidioBusy = true;
+  try {
+    const resp = await api.post('/presidio', payload);
+    if (!state.presidio) state.presidio = {};
+    state.presidio.enabled = !!(resp?.enabled ?? state.presidio.enabled);
+    state.presidio.recognizers = Array.isArray(resp?.recognizers) ? resp.recognizers : payload.recognizers;
+    renderPresidioMeta();
+    toast(t('presidio.updated'));
+  } catch (e) {
+    if (!state.presidio) state.presidio = {};
+    state.presidio.recognizers = prev;
+    renderPresidioMeta();
+    toast(t('presidio.updateFailed') + ': ' + e.message, 'error');
+  } finally {
+    presidioBusy = false;
+  }
+}
 
 function showAddKeyword() {
   const overlay = document.createElement('div');

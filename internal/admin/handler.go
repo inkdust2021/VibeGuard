@@ -25,6 +25,7 @@ func (a *Admin) Handler() http.Handler {
 	mux.HandleFunc("/manager/api/stats/stream", a.handleStatsStream)
 	mux.HandleFunc("/manager/api/patterns", a.handlePatterns)
 	mux.HandleFunc("/manager/api/patterns/", a.handlePatternsItem)
+	mux.HandleFunc("/manager/api/presidio", a.handlePresidio)
 	mux.HandleFunc("/manager/api/sessions", a.handleSessions)
 	mux.HandleFunc("/manager/api/certificates", a.handleCertificates)
 	mux.HandleFunc("/manager/api/certificates/trust", a.handleCertTrust)
@@ -46,6 +47,10 @@ func (a *Admin) Handler() http.Handler {
 
 	// Serve static files at /manager/*
 	mux.Handle("/manager/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// 管理面板属于本地管理工具，优先避免浏览器缓存导致“更新后仍看到旧 UI”的问题。
+		// 这里对 /manager/ 下的资源统一禁用缓存。
+		w.Header().Set("Cache-Control", "no-store")
+
 		// SPA fallback - serve index.html for non-file routes
 		path := strings.TrimPrefix(r.URL.Path, "/manager/")
 
