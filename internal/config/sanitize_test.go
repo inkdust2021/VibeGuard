@@ -19,3 +19,23 @@ func TestSanitizeCategory_仅保留安全字符并转大写(t *testing.T) {
 		t.Fatalf("SanitizeCategory()=%q, want %q", got, want)
 	}
 }
+
+func TestSanitizeNLPEngine(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{in: "heuristic", want: "heuristic"},
+		{in: " HeuRistic ", want: "heuristic"},
+		{in: "onnx", want: "onnx"},
+		{in: "ONNX", want: "onnx"},
+		{in: "bad", want: ""},
+		{in: "", want: ""},
+	}
+	for _, tc := range cases {
+		got := SanitizeNLPEngine(tc.in)
+		if got != tc.want {
+			t.Fatalf("SanitizeNLPEngine(%q)=%q, want %q", tc.in, got, tc.want)
+		}
+	}
+}

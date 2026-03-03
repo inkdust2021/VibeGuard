@@ -10,7 +10,6 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// startDetachedProxyProcess 在 Windows 上以“脱离控制台”的方式启动代理子进程。
 func startDetachedProxyProcess() error {
 	exe, err := os.Executable()
 	if err != nil {
@@ -20,7 +19,6 @@ func startDetachedProxyProcess() error {
 	c := exec.Command(exe, "start", "--foreground")
 	c.Env = os.Environ()
 
-	// 让子进程独立运行，避免父进程退出或控制台关闭影响子进程。
 	c.SysProcAttr = &syscall.SysProcAttr{
 		CreationFlags: windows.CREATE_NEW_PROCESS_GROUP | windows.DETACHED_PROCESS,
 		HideWindow:    true,

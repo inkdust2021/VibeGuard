@@ -36,14 +36,60 @@ type PatternsConfig struct {
 	Regex    []RegexPattern   `yaml:"regex"`
 	Builtin  []string         `yaml:"builtin"`
 	Exclude  []string         `yaml:"exclude"`
-	// Presidio 为“泛化 PII 识别”开关与配置（纯 Go 内置，无需外部 HTTP）。
-	Presidio PresidioConfig `yaml:"presidio"`
+	// RuleLists 为“类似 AdGuard 的订阅规则列表”：由用户上传/配置的规则文件，代理启动时加载并参与匹配。
+	// 说明：该规则列表更适合“通用模式”（正则/关键短语），而“具体密钥/口令”等建议仍使用 keywords（可配合加密落盘）。
+	RuleLists []RuleListConfig `yaml:"rule_lists"`
+	// NLP 为“泛化实体识别”开关与配置（可选：ONNX/NLP；默认关闭）。
+	NLP NLPConfig `yaml:"nlp"`
 }
 
-// PresidioConfig controls the built-in Presidio-style recognizers.
-type PresidioConfig struct {
-	Enabled     bool     `yaml:"enabled"`
-	Recognizers []string `yaml:"recognizers"`
+// NLPConfig controls the optional NLP-based recognizers (e.g. PERSON/ORG/LOCATION).
+// 说明：该配置本身不包含敏感信息；仅用于控制识别开关与实体类型。
+type NLPConfig struct {
+	Enabled bool `yaml:"enabled"`
+	// Engine 可选：heuristic|onnx。默认 heuristic（无需额外依赖）。
+	Engine string `yaml:"engine"`
+	// ModelPath 为 ONNX 模型目录或文件路径（仅 onnx 引擎需要）。
+	ModelPath string `yaml:"model_path"`
+	// RouteByLang 为 true 时，将按语言（中/英）路由到不同的模型目录。
+	// 说明：这能在“只使用单一语言”时显著降低常驻内存（按需加载）。
+	RouteByLang bool `yaml:"route_by_lang"`
+	// ModelPathEN / ModelPathZH 为按语言路由时的模型路径（可为空；为空将尝试回退到 ModelPath 或默认路径）。
+	ModelPathEN string `yaml:"model_path_en"`
+	ModelPathZH string `yaml:"model_path_zh"`
+	// MaxLoadedModels 控制最多同时常驻多少个 ONNX 模型（1=最低内存；2=切换更快）。
+	// 仅在 RouteByLang=true 且 Engine=onnx 时生效。
+	MaxLoadedModels int `yaml:"max_loaded_models"`
+	// Entities 指定启用的实体类型（如 PERSON/ORG/LOCATION/DATE...）。空表示使用实现内默认集合。
+	Entities []string `yaml:"entities"`
+	// MinScore 为 ONNX/NLP 模型的置信度阈值（仅 onnx 引擎需要；0 表示使用默认值）。
+	MinScore float64 `yaml:"min_score"`
+}
+
+// RuleListConfig 描述一个规则列表文件（逐行规则）。
+type RuleListConfig struct {
+	// ID 为稳定标识（管理端创建时生成）；可为空（将以 Path 作为展示名）。
+	ID string `yaml:"id" json:"id"`
+	// Name 为展示名（管理端可编辑）；可为空。
+	Name string `yaml:"name" json:"name"`
+	// Path 为规则文件路径（支持 ~ 前缀）；与 URL 二选一。
+	Path string `yaml:"path" json:"path"`
+	// URL 为远端订阅地址（http/https）；与 Path 二选一。
+	URL string `yaml:"url" json:"url"`
+	// SigURL 为远端订阅的“分离签名”地址（可选）；建议与 PubKey 配合使用（ed25519）。
+	SigURL string `yaml:"sig_url" json:"sig_url"`
+	// PubKey 为 ed25519 公钥（base64/hex）；用于校验 SigURL 提供的签名（可选）。
+	PubKey string `yaml:"pubkey" json:"pubkey"`
+	// SHA256 为内容哈希（hex，64 位）；用于固定版本校验（可选）。若希望自动更新，建议使用签名校验。
+	SHA256 string `yaml:"sha256" json:"sha256"`
+	// UpdateInterval 为订阅更新间隔（如 24h/6h）；仅 URL 模式生效。空值默认 24h。
+	UpdateInterval string `yaml:"update_interval" json:"update_interval"`
+	// AllowHTTP 为 true 时允许使用 http:// 订阅（不推荐；默认仅允许 https://）。
+	AllowHTTP bool `yaml:"allow_http" json:"allow_http"`
+	// Enabled 控制该规则列表是否参与匹配。
+	Enabled bool `yaml:"enabled" json:"enabled"`
+	// Priority 控制该规则列表的优先级（1~99）；越大越优先保留。
+	Priority int `yaml:"priority" json:"priority"`
 }
 
 // KeywordPattern represents a keyword to match
@@ -88,13 +134,21 @@ var defaultConfig = Config{
 		InterceptMode:     "global",
 	},
 	Patterns: PatternsConfig{
-		Keywords: []KeywordPattern{},
-		Regex:    []RegexPattern{},
-		Builtin:  []string{},
-		Exclude:  []string{},
-		Presidio: PresidioConfig{
-			Enabled:     false,
-			Recognizers: []string{},
+		Keywords:  []KeywordPattern{},
+		Regex:     []RegexPattern{},
+		Builtin:   []string{},
+		Exclude:   []string{},
+		RuleLists: []RuleListConfig{},
+		NLP: NLPConfig{
+			Enabled:         false,
+			Engine:          "heuristic",
+			ModelPath:       "",
+			RouteByLang:     false,
+			ModelPathEN:     "",
+			ModelPathZH:     "",
+			MaxLoadedModels: 1,
+			Entities:        []string{},
+			MinScore:        0,
 		},
 	},
 	Targets: []TargetConfig{
@@ -308,6 +362,66 @@ func sanitizeLoadedConfig(cfg *Config) {
 		cfg.Patterns.Exclude = out
 	}
 
+	// Patterns: rule_lists
+	if len(cfg.Patterns.RuleLists) > 0 {
+		out := make([]RuleListConfig, 0, len(cfg.Patterns.RuleLists))
+		seen := make(map[string]struct{}, len(cfg.Patterns.RuleLists))
+		for _, rl := range cfg.Patterns.RuleLists {
+			path := strings.TrimSpace(rl.Path)
+			url := strings.TrimSpace(rl.URL)
+			if path == "" && url == "" {
+				continue
+			}
+			id := SanitizePatternValue(rl.ID)
+			name := SanitizePatternValue(rl.Name)
+			sigURL := SanitizePatternValue(rl.SigURL)
+			pubKey := SanitizePatternValue(rl.PubKey)
+			sha256 := SanitizePatternValue(rl.SHA256)
+			updateInterval := strings.TrimSpace(rl.UpdateInterval)
+			allowHTTP := rl.AllowHTTP
+			if url != "" && updateInterval == "" {
+				updateInterval = "24h"
+			}
+			priority := rl.Priority
+			if priority <= 0 {
+				priority = 50
+			}
+			if priority > 99 {
+				priority = 99
+			}
+
+			// 去重键：优先使用 ID；否则按 Path/URL 去重，避免重复加载造成困惑/性能浪费。
+			key := id
+			if key == "" {
+				if path != "" {
+					key = "path:" + path
+				} else {
+					key = "url:" + url
+				}
+			}
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+
+			out = append(out, RuleListConfig{
+				ID:     id,
+				Name:   name,
+				Path:   path,
+				URL:    url,
+				SigURL: sigURL,
+				PubKey: pubKey,
+				SHA256: sha256,
+				// 仅 URL 模式生效；Path 模式保留原值但不使用。
+				UpdateInterval: updateInterval,
+				AllowHTTP:      allowHTTP,
+				Enabled:        rl.Enabled,
+				Priority:       priority,
+			})
+		}
+		cfg.Patterns.RuleLists = out
+	}
+
 	// Patterns: regex/builtin 目前不在管理页编辑，但仍做基础清理，避免分类名导致占位符无法还原。
 	if len(cfg.Patterns.Regex) > 0 {
 		out := make([]RegexPattern, 0, len(cfg.Patterns.Regex))
@@ -337,17 +451,35 @@ func sanitizeLoadedConfig(cfg *Config) {
 		cfg.Patterns.Builtin = out
 	}
 
-	// Patterns: presidio
-	if len(cfg.Patterns.Presidio.Recognizers) > 0 {
-		out := make([]string, 0, len(cfg.Patterns.Presidio.Recognizers))
-		for _, n := range cfg.Patterns.Presidio.Recognizers {
-			v := SanitizeRecognizerName(n)
+	// Patterns: nlp
+	if eng := SanitizeNLPEngine(cfg.Patterns.NLP.Engine); eng != "" {
+		cfg.Patterns.NLP.Engine = eng
+	} else if strings.TrimSpace(cfg.Patterns.NLP.Engine) == "" {
+		// 空值回退默认（避免配置文件缺失字段时出现空字符串）。
+		cfg.Patterns.NLP.Engine = defaultConfig.Patterns.NLP.Engine
+	} else {
+		// 非法值回退到默认。
+		cfg.Patterns.NLP.Engine = defaultConfig.Patterns.NLP.Engine
+	}
+	cfg.Patterns.NLP.ModelPath = strings.TrimSpace(cfg.Patterns.NLP.ModelPath)
+	cfg.Patterns.NLP.ModelPathEN = strings.TrimSpace(cfg.Patterns.NLP.ModelPathEN)
+	cfg.Patterns.NLP.ModelPathZH = strings.TrimSpace(cfg.Patterns.NLP.ModelPathZH)
+	if cfg.Patterns.NLP.MaxLoadedModels <= 0 {
+		cfg.Patterns.NLP.MaxLoadedModels = 1
+	}
+	if cfg.Patterns.NLP.MaxLoadedModels > 2 {
+		cfg.Patterns.NLP.MaxLoadedModels = 2
+	}
+	if len(cfg.Patterns.NLP.Entities) > 0 {
+		out := make([]string, 0, len(cfg.Patterns.NLP.Entities))
+		for _, e := range cfg.Patterns.NLP.Entities {
+			v := SanitizeCategory(e)
 			if v == "" {
 				continue
 			}
 			out = append(out, v)
 		}
-		cfg.Patterns.Presidio.Recognizers = out
+		cfg.Patterns.NLP.Entities = out
 	}
 
 	// Targets
@@ -506,13 +638,39 @@ func mergeConfigs(global, project Config) Config {
 		result.Patterns.Exclude = append(result.Patterns.Exclude, project.Patterns.Exclude...)
 	}
 
-	// Presidio: project-level settings can enable and/or override recognizers list.
-	if project.Patterns.Presidio.Enabled {
-		result.Patterns.Presidio.Enabled = true
+	// Merge rule lists (append, not replace)
+	if len(project.Patterns.RuleLists) > 0 {
+		result.Patterns.RuleLists = append(result.Patterns.RuleLists, project.Patterns.RuleLists...)
 	}
-	if len(project.Patterns.Presidio.Recognizers) > 0 {
-		// Recognizers 列表更适合“覆盖”而不是 append，避免跨项目叠加造成困惑。
-		result.Patterns.Presidio.Recognizers = append([]string(nil), project.Patterns.Presidio.Recognizers...)
+
+	// NLP: project-level settings can enable and/or override entities.
+	if project.Patterns.NLP.Enabled {
+		result.Patterns.NLP.Enabled = true
+	}
+	if strings.TrimSpace(project.Patterns.NLP.Engine) != "" {
+		result.Patterns.NLP.Engine = project.Patterns.NLP.Engine
+	}
+	if strings.TrimSpace(project.Patterns.NLP.ModelPath) != "" {
+		result.Patterns.NLP.ModelPath = project.Patterns.NLP.ModelPath
+	}
+	if project.Patterns.NLP.RouteByLang {
+		result.Patterns.NLP.RouteByLang = true
+	}
+	if strings.TrimSpace(project.Patterns.NLP.ModelPathEN) != "" {
+		result.Patterns.NLP.ModelPathEN = project.Patterns.NLP.ModelPathEN
+	}
+	if strings.TrimSpace(project.Patterns.NLP.ModelPathZH) != "" {
+		result.Patterns.NLP.ModelPathZH = project.Patterns.NLP.ModelPathZH
+	}
+	if project.Patterns.NLP.MaxLoadedModels > 0 {
+		result.Patterns.NLP.MaxLoadedModels = project.Patterns.NLP.MaxLoadedModels
+	}
+	if len(project.Patterns.NLP.Entities) > 0 {
+		// Entities 同样采用覆盖语义。
+		result.Patterns.NLP.Entities = append([]string(nil), project.Patterns.NLP.Entities...)
+	}
+	if project.Patterns.NLP.MinScore != 0 {
+		result.Patterns.NLP.MinScore = project.Patterns.NLP.MinScore
 	}
 
 	// Merge targets (append, not replace)

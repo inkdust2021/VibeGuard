@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/inkdust2021/vibeguard/internal/pii_next/keywords"
-	"github.com/inkdust2021/vibeguard/internal/pii_next/presidio"
 	"github.com/inkdust2021/vibeguard/internal/pii_next/recognizer"
+	"github.com/inkdust2021/vibeguard/internal/pii_next/rulelist"
 	"github.com/inkdust2021/vibeguard/internal/session"
 )
 
@@ -30,8 +30,15 @@ func TestPipeline_RedactWithMatches(t *testing.T) {
 		{Text: "Samuel Porter", Category: "TEXT"},
 	})
 
-	recs := []recognizer.Recognizer{kw}
-	recs = append(recs, presidio.DefaultRecognizers()...)
+	rl, err := rulelist.Parse(strings.NewReader(`regex EMAIL (?i)[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}`), rulelist.ParseOptions{
+		Name:     "test_rules",
+		Priority: 50,
+	})
+	if err != nil {
+		t.Fatalf("parse rule list: %v", err)
+	}
+
+	recs := []recognizer.Recognizer{kw, rl}
 	p := New(sess, "__VG_", recs...)
 
 	input := []byte("hi I'm Samuel Porter. My email is Samuel@gmail.com.")

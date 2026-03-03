@@ -44,12 +44,12 @@ func NewManager(ttl time.Duration, maxSize int) *Manager {
 	}
 
 	m := &Manager{
-		forward:  make(map[string]string),
-		reverse:  make(map[string]string),
-		created:  make(map[string]time.Time),
-		ttl:      ttl,
-		maxSize:  maxSize,
-		stopChan: make(chan struct{}),
+		forward:      make(map[string]string),
+		reverse:      make(map[string]string),
+		created:      make(map[string]time.Time),
+		ttl:          ttl,
+		maxSize:      maxSize,
+		stopChan:     make(chan struct{}),
 		randomSecret: randomSecret,
 	}
 

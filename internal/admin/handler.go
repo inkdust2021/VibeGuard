@@ -25,7 +25,11 @@ func (a *Admin) Handler() http.Handler {
 	mux.HandleFunc("/manager/api/stats/stream", a.handleStatsStream)
 	mux.HandleFunc("/manager/api/patterns", a.handlePatterns)
 	mux.HandleFunc("/manager/api/patterns/", a.handlePatternsItem)
-	mux.HandleFunc("/manager/api/presidio", a.handlePresidio)
+	mux.HandleFunc("/manager/api/rule_lists", a.handleRuleLists)
+	mux.HandleFunc("/manager/api/rule_lists/upload", a.handleRuleListsUpload)
+	mux.HandleFunc("/manager/api/rule_lists/subscribe", a.handleRuleListsSubscribe)
+	mux.HandleFunc("/manager/api/rule_lists/", a.handleRuleListsItem)
+	mux.HandleFunc("/manager/api/nlp", a.handleNLP)
 	mux.HandleFunc("/manager/api/sessions", a.handleSessions)
 	mux.HandleFunc("/manager/api/certificates", a.handleCertificates)
 	mux.HandleFunc("/manager/api/certificates/trust", a.handleCertTrust)
@@ -35,6 +39,9 @@ func (a *Admin) Handler() http.Handler {
 	mux.HandleFunc("/manager/api/audit/stream", a.handleAuditStream)
 	mux.HandleFunc("/manager/api/logs", a.handleLogs)
 	mux.HandleFunc("/manager/api/logs/stream", a.handleLogsStream)
+	mux.HandleFunc("/manager/api/debug", a.handleDebug)
+	mux.HandleFunc("/manager/api/debug/events", a.handleDebugEvents)
+	mux.HandleFunc("/manager/api/debug/events/", a.handleDebugEventsItem)
 	mux.HandleFunc("/manager/api/settings", a.handleSettings)
 
 	// Static files - serve from embedded FS

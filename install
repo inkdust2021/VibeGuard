@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# VibeGuard 一行安装脚本入口（用于：curl -fsSL .../install | bash）
+# 说明：
+# - 本文件仅做“引导”，真实安装逻辑在 install.sh
+# - 可通过环境变量覆盖仓库与分支/标签（便于 fork 或固定版本）：
+#   VG_INSTALL_REPO=owner/repo   (默认：inkdust2021/VibeGuard)
+#   VG_INSTALL_REF=ref          (默认：main；可设为 v1.2.3 或 commit SHA)
+#
+# One-line installer entrypoint. The real installer lives in install.sh.
+
+have() { command -v "$1" >/dev/null 2>&1; }
+
+VG_INSTALL_REPO="${VG_INSTALL_REPO:-inkdust2021/VibeGuard}"
+VG_INSTALL_REF="${VG_INSTALL_REF:-main}"
+VG_INSTALL_PATH="${VG_INSTALL_PATH:-install.sh}"
+
+url="https://raw.githubusercontent.com/${VG_INSTALL_REPO}/${VG_INSTALL_REF}/${VG_INSTALL_PATH}"
+
+# 若当前目录已包含 install.sh（例如已 clone 仓库），优先使用本地脚本，避免重复联网。
+if [[ -f "./install.sh" ]]; then
+  bash "./install.sh" "$@"
+  exit 0
+fi
+
+if have curl; then
+  curl -fsSL "${url}" | bash -s -- "$@"
+elif have wget; then
+  wget -qO- "${url}" | bash -s -- "$@"
+else
+  echo "错误：缺少依赖 curl 或 wget" >&2
+  echo "Error: missing curl or wget" >&2
+  exit 1
+fi

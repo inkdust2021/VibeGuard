@@ -1,0 +1,55 @@
+# syntax=docker/dockerfile:1
+
+# ONNX 版本 Docker 镜像：
+# - 构建：启用 cgo + `-tags onnx`
+# - 运行：内置 onnxruntime 动态库（linux-aarch64 / linux-x64）
+# - 模型：建议通过 volume 挂载到 /root/.vibeguard/models/ner（避免把大模型打进镜像）
+
+FROM golang:1.24-bookworm AS builder
+
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+RUN CGO_ENABLED=1 go build -trimpath -buildvcs=false -tags onnx -ldflags "-s -w" -o /out/vibeguard ./cmd/vibeguard
+
+
+FROM golang:1.24-bookworm AS ort
+
+ARG ONNXRUNTIME_VERSION=1.24.1
+ARG TARGETARCH
+
+RUN set -eu; \
+  arch="x64"; \
+  if [ "${TARGETARCH:-}" = "arm64" ]; then arch="aarch64"; fi; \
+  url="https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-linux-${arch}-${ONNXRUNTIME_VERSION}.tgz"; \
+  echo "Downloading: ${url}"; \
+  mkdir -p /opt/ort; \
+  curl -fsSL -o /tmp/ort.tgz "${url}"; \
+  tar -xzf /tmp/ort.tgz -C /opt/ort --strip-components=1; \
+  rm -f /tmp/ort.tgz
+
+
+FROM debian:bookworm-slim
+
+WORKDIR /root
+ENV HOME=/root
+
+COPY --from=builder /out/vibeguard /usr/local/bin/vibeguard
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+
+# CA 证书（避免 slim 镜像缺少导致上游 TLS 失败）
+COPY --from=ort /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+
+# onnxruntime 动态库（拷贝整个 lib 目录，避免不同架构/版本文件名差异）
+COPY --from=ort /opt/ort/lib/ /usr/local/lib/
+
+# 确保运行期动态库可被加载
+ENV LD_LIBRARY_PATH=/usr/local/lib
+
+EXPOSE 28657
+
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["start", "--foreground"]

@@ -14,8 +14,8 @@ func NewPhoneRecognizer() recognizer.Recognizer {
 		name:     "presidio-phone",
 		category: "PHONE",
 		priority: 110,
-		re:    mustCompile(`(?:^|[^0-9A-Za-z_])(\+?\d[\d()\-\.\s]{6,}\d)\b`),
-		group: 1,
+		re:       mustCompile(`(?:^|[^0-9A-Za-z_])(\+?\d[\d()\-\.\s]{6,}\d)\b`),
+		group:    1,
 		validate: func(matched []byte) bool {
 			s := strings.TrimSpace(string(matched))
 			if s == "" {
@@ -54,8 +54,8 @@ func isAllDigits(s string) bool {
 }
 
 var (
-	reYMD     = regexp.MustCompile(`^\d{4}[-/.]\d{2}[-/.]\d{2}$`)
-	reYMDHMS  = regexp.MustCompile(`^\d{4}[-/.]\d{2}[-/.]\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?$`)
+	reYMD    = regexp.MustCompile(`^\d{4}[-/.]\d{2}[-/.]\d{2}$`)
+	reYMDHMS = regexp.MustCompile(`^\d{4}[-/.]\d{2}[-/.]\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?$`)
 )
 
 func looksLikeDateOrTimestamp(s string) bool {

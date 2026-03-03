@@ -1,72 +1,78 @@
-# VibeGuard
+<p align="center">
+  <img src="./image/logo.jpg" alt="VibeGuard" width="720"><br>
+  <em>Rule-speed efficiency, NLP-grade accuracy—Seamless privacy for your AI coding vibe.</em><br>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/inkdust2021/VibeGuard"></a>
+  <a href="go.mod"><img alt="Go Version" src="https://img.shields.io/github/go-mod/go-version/inkdust2021/VibeGuard"></a>
+  <a href="https://github.com/inkdust2021/VibeGuard/actions/workflows/ghcr.yml"><img alt="GHCR Build" src="https://img.shields.io/github/actions/workflow/status/inkdust2021/VibeGuard/ghcr.yml?label=ghcr"></a>
+  <a href="https://ghcr.io/inkdust2021/vibeguard"><img alt="GHCR Image" src="https://img.shields.io/badge/ghcr.io-inkdust2021%2Fvibeguard-2ea44f?logo=docker&logoColor=white"></a>
+  <a href="https://github.com/inkdust2021/VibeGuard/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/inkdust2021/VibeGuard?style=social"></a>
+  <br>
+  English | <a href="README.zh-CN.md">中文</a>
+</p>
 
-[![License](https://img.shields.io/github/license/inkdust2021/VibeGuard)](LICENSE)
-[![Go Version](https://img.shields.io/github/go-mod/go-version/inkdust2021/VibeGuard)](go.mod)
-[![GHCR Build](https://img.shields.io/github/actions/workflow/status/inkdust2021/VibeGuard/ghcr.yml?label=ghcr)](https://github.com/inkdust2021/VibeGuard/actions/workflows/ghcr.yml)
-[![GHCR Image](https://img.shields.io/badge/ghcr.io-inkdust2021%2Fvibeguard-2ea44f?logo=docker&logoColor=white)](https://ghcr.io/inkdust2021/vibeguard)
-[![Stars](https://img.shields.io/github/stars/inkdust2021/VibeGuard?style=social)](https://github.com/inkdust2021/VibeGuard/stargazers)
+## Installation
 
-English | [中文](README.zh-CN.md)
+```bash
+# Mac/Linux
+curl -fsSL https://raw.githubusercontent.com/inkdust2021/VibeGuard/main/install | bash
 
-VibeGuard is a MITM HTTPS proxy for protecting sensitive data when vibecoding.
+# Windows
+powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://raw.githubusercontent.com/inkdust2021/VibeGuard/main/install.ps1 | iex"
+```
 
-- Process-only proxy launcher: `vibeguard codex/claude/gemini/opencode/qwen`
-- Admin UI: rules + audit at `http://127.0.0.1:28657/manager/`
-- Placeholder restore for JSON and SSE responses
+## Introduction
+
+VibeGuard is a lightweight MITM HTTPS proxy for protecting sensitive data when vibecoding. It aims to be out-of-the-box and minimize disruption, and it can also integrate optional NLP.
+
+- Process-only proxy launcher: `vibeguard codex/claude/gemini/opencode/qwen...`
+- Admin UI: configure rules and review audit hits at `http://127.0.0.1:28657/manager/`
+- Placeholder restore for JSON / SSE responses
 
 ## Key Features
 
-- **Redaction rules**: keyword rules (exact substring match) + optional built-in generic PII recognizers (email/phone/credit card/IBAN/SSN/IP/UUID, etc).
-- **Safe by default**: only scans text-like bodies (e.g., `application/json`) up to 10MB.
-- **Admin UI**: manage rules, certificates, sessions, per-request “redaction hit” events at `/manager/`, and tail debug logs at `#/logs`.
+- **Matching rules**: rule lists (official + third-party) + keywords (exact string match) + optional generic entity recognition (NLP).
+- **NLP (optional)**: supports BERT/DistilBERT-style **token-classification (NER) + WordPiece** models (requires `model.onnx`, `vocab.txt`, `labels.txt`, optional `vibeguard_ner.json`). See `docs/README.md`.
+- **Rule lists**: upload/subscribe to `.vgrules` lists (remote subscriptions support ed25519 signatures or pinned SHA-256). See `docs/README.md`.
+- **Safe by default**: only scans text-like request bodies (e.g., `application/json`) with a 10MB limit.
+- **Admin UI**: configure rules/certificates/sessions at `/manager/`, review per-request redaction hits (Audit), and tail backend debug logs at `#/logs`.
 - **Admin auth**: the admin UI/API is protected by a password (set on first visit to `/manager/`).
-- **At-rest encryption (keywords)**: keyword/exclude values are stored encrypted in `~/.vibeguard/config.yaml` using a key derived from the local CA private key (admin UI still shows plaintext). If you regenerate the CA, old encrypted values cannot be decrypted.
-- **Two interception modes**: `proxy.intercept_mode: global` (recommended for most clients) or `targets`.
-- **Hot reload**: pattern/target changes from the admin UI take effect without restarting.
+- **At-rest encryption (keywords)**: keyword/exclude values are stored encrypted in `~/.vibeguard/config.yaml` using a key derived from the local CA private key (admin UI still shows plaintext). If you regenerate the CA, old encrypted values cannot be decrypted and must be reconfigured.
+- **Two interception modes**: `proxy.intercept_mode: global` or `targets`.
+- **Hot reload**: rule/target updates from the admin UI take effect without restarting.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
   C[Client: Codex / Claude / IDE] -->|HTTPS via proxy| P[Proxy: MITM TLS]
-  P -->|Request body| R[Redaction engine<br/>Keywords + Generic PII]
-  R -->|Placeholders| U[Upstream AI API]
+  P -->|Request body: text-like only| PIPE[Redaction pipeline]
+  PIPE -->|Replace with placeholders| U[Upstream AI API]
   U -->|Response JSON/SSE| S[Restore engine]
-  S -->|Restored response| C
+  S -->|Restore originals| C
+
+  subgraph DET[Detectors - composable]
+    KW[Keywords]
+    RL[Rule Lists - .vgrules]
+    NLP[NLP Entities]
+  end
+  KW --> PIPE
+  RL --> PIPE
+  NLP --> PIPE
 
   UI[Admin UI /manager/] -->|Edit rules| CFG[Config]
-  CFG -->|Hot reload| R
+  CFG -->|Hot reload| PIPE
   CFG -->|Intercept mode| P
 
-  R <--> SES[Session store: TTL + WAL]
+  PIPE <--> SES[Session store: TTL + WAL]
   S <--> SES
 
   P -->|Audit events| A[Audit]
   UI --> A
 ```
 
-## Integrations
+## Screenshot
 
-Tools that VibeGuard can launch in “process-only” proxy mode:
-
-- Codex CLI: `vibeguard codex`
-- Claude Code: `vibeguard claude`
-- Gemini CLI: `vibeguard gemini`
-- OpenCode: `vibeguard opencode`
-- Qwen CLI: `vibeguard qwen`
-
-## Screenshots
-
-![Admin UI](./screenshot/gui.png)
-
-![Claude Code](./screenshot/cc.png)
-
-## Quick Start (from source)
-
-```bash
-go run ./cmd/vibeguard init
-go run ./cmd/vibeguard start --foreground
-```
+![cc](./image/cc.png)
 
 ## Admin UI Security
 
@@ -75,24 +81,6 @@ go run ./cmd/vibeguard start --foreground
 - Forgot it? Stop VibeGuard, delete `~/.vibeguard/admin_auth.json`, then refresh `/manager/` to set a new one.
 - Keep the admin UI bound to localhost (`127.0.0.1`) and avoid exposing the port to LAN/public networks.
 
-## Install (script)
-
-macOS/Linux:
-
-```bash
-bash install.sh
-```
-
-The installer is interactive (language, PATH, CA trust, autostart). The selected language is remembered for the admin UI and uninstall script.
-
-Windows (PowerShell):
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\\install.ps1
-```
-
-The PowerShell installer is interactive too (and remembers the selected language).
-
 ## Uninstall
 
 macOS/Linux:
@@ -100,7 +88,11 @@ macOS/Linux:
 ```bash
 bash uninstall.sh
 bash uninstall.sh --purge
+bash uninstall.sh --docker
+bash uninstall.sh --docker --docker-volume
 ```
+
+Note: `--docker-volume` removes the `vibeguard-data` Docker volume (container config + CA will be lost).
 
 Windows (PowerShell):
 
@@ -111,202 +103,41 @@ powershell -ExecutionPolicy Bypass -File .\\uninstall.ps1 -Purge
 
 The uninstallers try to remove the trusted CA (“VibeGuard CA”) automatically. If it fails (e.g., permissions), remove it manually.
 
-## Docker(recommend)
-
-By default, `docker-compose.yml` uses the prebuilt image from GHCR (binds to localhost only):
-
-```bash
-docker compose pull
-docker compose up -d
-```
-
-Update (pull the latest image and restart):
-
-```bash
-docker compose pull vibeguard
-docker compose up -d
-```
-
-Security tip (recommended for vibecoding): keep VibeGuard state *inside Docker* (the default). `docker-compose.yml` uses a Docker named volume (`vibeguard-data`) for `/root/.vibeguard`, so your host filesystem won’t contain the CA private key or config files by default. Avoid changing this to a bind mount like `~/.vibeguard:/root/.vibeguard`. If you need host trust, export **only** `ca.crt` (do not copy `ca.key`).
-
-Build from source (contributors / before the first release image exists):
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.source.yml up -d --build
-```
-
-Tip: enabling BuildKit can speed up source rebuilds:
-
-```bash
-DOCKER_BUILDKIT=1 docker compose -f docker-compose.yml -f docker-compose.source.yml build
-```
-
-View logs:
-
-```bash
-docker compose logs -f vibeguard
-```
-
-`zsh: command not found: vibeguard` on the host?
-
-- That’s expected in Docker-only mode (the `vibeguard` binary lives inside the container).
-- Run CLI commands in the container:
-
-```bash
-docker compose exec -T vibeguard vibeguard --help
-docker compose exec -T vibeguard vibeguard version
-```
-
-Deploy (from scratch) and export CA cert:
-
-```bash
-git clone https://github.com/inkdust2021/VibeGuard.git
-cd VibeGuard
-docker compose pull
-docker compose up -d
-docker compose exec -T vibeguard cat /root/.vibeguard/ca.crt > vibeguard-ca.crt
-```
-
-Trust the CA on your host:
-
-- macOS (system keychain):
-
-```bash
-sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain vibeguard-ca.crt
-```
-
-- Linux (Debian/Ubuntu):
-
-```bash
-sudo cp vibeguard-ca.crt /usr/local/share/ca-certificates/vibeguard-ca.crt
-sudo update-ca-certificates
-```
-
-- Windows (run as Administrator):
-
-```powershell
-certutil -addstore -f Root vibeguard-ca.crt
-```
-
-Client setup:
-
-- Proxy URL: `http://127.0.0.1:28657`
-- Admin UI: `http://127.0.0.1:28657/manager/`
-
-For CLI assistants, prefer “process-only” mode (does not affect your whole terminal):
-
-- If you installed `vibeguard` on the host:
-
-```bash
-vibeguard codex [args...]
-vibeguard claude [args...]
-vibeguard gemini [args...]
-vibeguard opencode [args...]
-vibeguard qwen [args...]
-vibeguard run <command> [args...]
-```
-
-- Docker-only (no host `vibeguard`): do **NOT** use `alias vibeguard='docker compose exec ... vibeguard'` for `vibeguard claude` (it runs `claude` inside the container, which is usually not installed). Instead, add this shell function to your `~/.zshrc`/`~/.bashrc`:
-
-```bash
-# Set this to the directory where you cloned VibeGuard (contains docker-compose.yml)
-export VIBEGUARD_DOCKER_DIR="$HOME/Code/VibeGuard"
-export VIBEGUARD_PROXY_URL="http://127.0.0.1:28657"
-export VIBEGUARD_CA_CERT="$VIBEGUARD_DOCKER_DIR/vibeguard-ca.crt"
-
-vibeguard() {
-  local sub="${1:-}"
-  if [ -z "$sub" ]; then
-    docker compose --project-directory "$VIBEGUARD_DOCKER_DIR" exec -T vibeguard vibeguard --help
-    return
-  fi
-  shift || true
-  case "$sub" in
-    claude|codex|gemini|opencode|qwen)
-      # Runs the assistant on the host, but only this process uses the proxy.
-      HTTPS_PROXY="$VIBEGUARD_PROXY_URL" HTTP_PROXY="$VIBEGUARD_PROXY_URL" \
-      https_proxy="$VIBEGUARD_PROXY_URL" http_proxy="$VIBEGUARD_PROXY_URL" \
-      NO_PROXY="127.0.0.1,localhost" no_proxy="127.0.0.1,localhost" \
-      NODE_EXTRA_CA_CERTS="$VIBEGUARD_CA_CERT" \
-      "$sub" "$@"
-      ;;
-    run)
-      HTTPS_PROXY="$VIBEGUARD_PROXY_URL" HTTP_PROXY="$VIBEGUARD_PROXY_URL" \
-      https_proxy="$VIBEGUARD_PROXY_URL" http_proxy="$VIBEGUARD_PROXY_URL" \
-      NO_PROXY="127.0.0.1,localhost" no_proxy="127.0.0.1,localhost" \
-      NODE_EXTRA_CA_CERTS="$VIBEGUARD_CA_CERT" \
-      "$@"
-      ;;
-    *)
-      # Proxy management subcommands are executed inside the container.
-      docker compose --project-directory "$VIBEGUARD_DOCKER_DIR" exec -T vibeguard vibeguard "$sub" "$@"
-      ;;
-  esac
-}
-```
-
-For IDE/GUI apps (Cursor, etc), set the app’s proxy URL to `http://127.0.0.1:28657`.
-
-Reset the container state (regenerates CA/config; requires re-trusting):
-
-```bash
-docker compose down -v
-```
-
-## Certificates (macOS/Linux)
-
-To MITM HTTPS, your client must trust the generated CA:
-
-```bash
-go run ./cmd/vibeguard trust --mode system   # may require sudo
-```
-
 ## Configuration
 
 - Global: `~/.vibeguard/config.yaml`
 - Project override: `.vibeguard.yaml`
 - Override path: `VIBEGUARD_CONFIG=/path/to/config.yaml`
 
-## CLI
-
-Full command reference: `CLI.md`. (Everything is also listed here.)
+## CLI Commands
 
 Global flag:
 
 - `-c, --config PATH`: config file (default `~/.vibeguard/config.yaml`).
 
-### Start proxy service (background by default)
+### Start proxy (background by default)
 
 ```bash
 vibeguard start [--foreground] [-c PATH]
 ```
 
-- Default: starts as a background service/process (if available).
-- `--foreground`: run in foreground (service/debugging).
+- Default: prefers an installed autostart service; otherwise starts a background process.
+- `--foreground`: run in foreground (debugging / service ExecStart).
 - If `--config` is set, it runs in foreground (to avoid ambiguity).
 
-### Stop proxy service/process
+### Stop proxy (background service/process)
 
 ```bash
 vibeguard stop [-c PATH]
 ```
 
-### Run Claude Code with proxy (process-only)
+### Enable proxy only for Code Agents (does not affect your current terminal)
 
 ```bash
-vibeguard claude [args...]
+vibeguard opencode/claude/codex... [args...]
 ```
 
-### Run other assistants with proxy (process-only)
-
-```bash
-vibeguard codex [args...]
-vibeguard gemini [args...]
-vibeguard opencode [args...]
-vibeguard qwen [args...]
-```
-
-### Run any command with proxy (process-only)
+### Enable proxy only for a command (does not affect your current terminal)
 
 ```bash
 vibeguard run <command> [args...]
@@ -318,7 +149,7 @@ vibeguard run <command> [args...]
 vibeguard init [-c PATH]
 ```
 
-Interactive first-time setup (config + CA).
+Interactive config + CA generation.
 
 ### Trust CA certificate (required for HTTPS MITM)
 
@@ -326,7 +157,7 @@ Interactive first-time setup (config + CA).
 vibeguard trust --mode system|user|auto [-c PATH]
 ```
 
-Installs the generated CA to a trust store so clients can accept MITM TLS. (May require `sudo`/Administrator.)
+Installs the generated CA into a trust store. (May require `sudo`/Administrator.)
 
 ### Test a redaction rule
 
@@ -336,7 +167,7 @@ vibeguard test [pattern] [text] [-c PATH]
 
 `pattern` is treated as a keyword (exact substring match).
 
-Examples:
+Example:
 
 ```bash
 vibeguard test "test123" "Please repeat the word I just said, and remove its first letter."
@@ -362,20 +193,26 @@ vibeguard help [command]
 vibeguard [command] --help
 ```
 
-## Verify It Works (Vibe coding)
+## How to Verify It Works (Vibecoding)
 
 1. Start the proxy: `vibeguard start` (the installer can do this automatically).
 2. Trust the CA once: `vibeguard trust --mode system` (may require `sudo`/Administrator).
 3. Launch your tool via VibeGuard (`vibeguard codex/claude/...`) or set your IDE/app proxy URL to `http://127.0.0.1:28657`.
 4. In `/manager/`, check the **Audit** panel: each request shows whether redaction was attempted and how many matches were replaced.
 
-## Development
+## Development & Self-check
 
 ```bash
 go test ./...
 go vet ./...
 gofmt -w .
 ```
+
+## Included officially
+
+VibeGuard is officially integrated by:
+
+- OpenCode: https://github.com/inkdust2021/opencode-vibeguard
 
 ## Star History
 

@@ -26,6 +26,7 @@ type Admin struct {
 	stats    *StatsCollector
 	started  atomic.Int64 // Unix timestamp
 	audit    *AuditStore
+	debug    *DebugStore
 	auth     *AuthManager
 }
 
@@ -40,6 +41,7 @@ func New(cfg *config.Manager, sess *session.Manager, ca *cert.CA, certPath, keyP
 		keyPath:  keyPath,
 		stats:    &StatsCollector{},
 		audit:    NewAuditStore(200),
+		debug:    NewDebugStore(50),
 		auth:     auth,
 	}
 	a.started.Store(0)
@@ -71,4 +73,12 @@ func (a *Admin) UpdateAudit(id int64, fn func(*AuditEvent)) (AuditEvent, bool) {
 		return AuditEvent{}, false
 	}
 	return a.audit.Update(id, fn)
+}
+
+// Debug 返回调试抓包存储（仅内存，不落盘）。
+func (a *Admin) Debug() *DebugStore {
+	if a == nil {
+		return nil
+	}
+	return a.debug
 }

@@ -21,6 +21,8 @@ PURGE="0"
 YES="0"
 NON_INTERACTIVE="0"
 CONFIG_FILE="${VIBEGUARD_CONFIG:-${HOME:-}/.vibeguard/config.yaml}"
+DOCKER_CLEANUP="0"
+DOCKER_VOLUME_CLEANUP="0"
 
 to_lower() { echo "${1:-}" | tr '[:upper:]' '[:lower:]'; }
 
@@ -432,6 +434,89 @@ remove_installed_binary() {
   fi
 }
 
+docker_container_exists() {
+  local name="${1:-}"
+  [[ -n "${name}" ]] || return 1
+  docker ps -a --format '{{.Names}}' 2>/dev/null | grep -Fxq "${name}"
+}
+
+docker_volume_exists() {
+  local name="${1:-}"
+  [[ -n "${name}" ]] || return 1
+  docker volume ls --format '{{.Name}}' 2>/dev/null | grep -Fxq "${name}"
+}
+
+cleanup_docker_best_effort() {
+  local container_name="vibeguard"
+  local volume_name="vibeguard-data"
+
+  if [[ "${DOCKER_CLEANUP}" != "1" ]]; then
+    return 0
+  fi
+
+  if [[ "${YES}" != "1" && "${NON_INTERACTIVE}" == "1" ]]; then
+    die "非交互模式下执行 --docker/--docker-volume 需要同时带上 --yes" "In non-interactive mode, --docker/--docker-volume requires --yes"
+  fi
+
+  if ! have docker; then
+    warn "未找到 docker：跳过 Docker 清理" "docker not found; skipping Docker cleanup"
+    return 0
+  fi
+
+  if ! docker info >/dev/null 2>&1; then
+    warn "Docker 未运行或不可用：跳过 Docker 清理" "Docker does not seem to be running; skipping Docker cleanup"
+    return 0
+  fi
+
+  if docker_container_exists "${container_name}"; then
+    if [[ "${YES}" != "1" && "${NON_INTERACTIVE}" == "0" && is_tty ]]; then
+      echo ""
+      echo "⚠️ $(t "将删除 Docker 容器：${container_name}（不会删除数据卷）" "This will remove Docker container: ${container_name} (keeps volumes)")"
+      read -r -p "$(t "确认删除容器？[y/N]: " "Confirm remove container? [y/N]: ")" ans || true
+      ans="${ans:-N}"
+      if [[ "${ans}" != "Y" && "${ans}" != "y" ]]; then
+        warn "已跳过 Docker 容器删除" "Skipped Docker container removal"
+      else
+        if docker rm -f "${container_name}" >/dev/null 2>&1; then
+          echo "$(t "已删除 Docker 容器：${container_name}" "Removed Docker container: ${container_name}")"
+        else
+          warn "删除 Docker 容器失败：${container_name}" "Failed to remove Docker container: ${container_name}"
+        fi
+      fi
+    else
+      if docker rm -f "${container_name}" >/dev/null 2>&1; then
+        echo "$(t "已删除 Docker 容器：${container_name}" "Removed Docker container: ${container_name}")"
+      else
+        warn "删除 Docker 容器失败：${container_name}" "Failed to remove Docker container: ${container_name}"
+      fi
+    fi
+  else
+    echo "$(t "未找到 Docker 容器：${container_name}" "Docker container not found: ${container_name}")"
+  fi
+
+  if [[ "${DOCKER_VOLUME_CLEANUP}" == "1" ]]; then
+    if docker_volume_exists "${volume_name}"; then
+      if [[ "${YES}" != "1" && "${NON_INTERACTIVE}" == "0" && is_tty ]]; then
+        echo ""
+        echo "⚠️ $(t "将删除 Docker 数据卷：${volume_name}（会丢失容器内配置与 CA）" "This will remove Docker volume: ${volume_name} (loses container config + CA)")"
+        read -r -p "$(t "确认删除数据卷？[y/N]: " "Confirm remove volume? [y/N]: ")" ans || true
+        ans="${ans:-N}"
+        if [[ "${ans}" != "Y" && "${ans}" != "y" ]]; then
+          warn "已跳过 Docker 数据卷删除" "Skipped Docker volume removal"
+          return 0
+        fi
+      fi
+      if docker volume rm "${volume_name}" >/dev/null 2>&1; then
+        echo "$(t "已删除 Docker 数据卷：${volume_name}" "Removed Docker volume: ${volume_name}")"
+      else
+        warn "删除 Docker 数据卷失败：${volume_name}（可能仍被容器占用）" "Failed to remove Docker volume: ${volume_name} (may still be in use)"
+      fi
+    else
+      echo "$(t "未找到 Docker 数据卷：${volume_name}" "Docker volume not found: ${volume_name}")"
+    fi
+  fi
+}
+
 purge_config_dir() {
   local cfg_dir="${HOME}/.vibeguard"
   [[ -d "${cfg_dir}" ]] || return 0
@@ -459,6 +544,10 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --dir)
       INSTALL_DIR="${2:-}"; shift 2;;
+    --docker)
+      DOCKER_CLEANUP="1"; shift 1;;
+    --docker-volume|--docker-volumes)
+      DOCKER_CLEANUP="1"; DOCKER_VOLUME_CLEANUP="1"; shift 1;;
     --purge)
       PURGE="1"; shift 1;;
     --yes)
@@ -473,13 +562,17 @@ VibeGuard 卸载脚本 / Uninstaller
 
 参数 / Options:
   --dir DIR           安装目录 / Install dir (default: $HOME/.local/bin)
+  --docker            清理 Docker 容器 vibeguard / Remove Docker container vibeguard
+  --docker-volume     同时清理 Docker 数据卷 vibeguard-data（会丢失容器内配置与 CA） / Also remove vibeguard-data volume (loses config+CA)
   --purge             删除 ~/.vibeguard：配置/证书/日志/WAL / Remove ~/.vibeguard
-  --yes               跳过确认：配合 --purge / Skip confirmations: for --purge
+  --yes               跳过确认：配合 --purge/--docker-volume / Skip confirmations: for --purge/--docker-volume
   --lang LANG         zh|en (default: auto)
   --non-interactive   非交互模式 / Non-interactive
 
 示例 / Examples:
   bash uninstall.sh
+  bash uninstall.sh --docker
+  bash uninstall.sh --docker --docker-volume
   bash uninstall.sh --purge
   bash uninstall.sh --purge --yes --non-interactive
 EOF
@@ -547,6 +640,9 @@ esac
 
 say "停止后台代理" "Stopping proxy"
 stop_proxy_best_effort
+
+say "清理 Docker（可选）" "Cleaning Docker (optional)"
+cleanup_docker_best_effort
 
 untrust_ok="1"
 say "移除信任证书" "Removing trusted CA"

@@ -14,7 +14,7 @@ func NewCreditCardRecognizer() recognizer.Recognizer {
 		name:     "presidio-credit-card",
 		category: "CREDIT_CARD",
 		priority: 130,
-		re: mustCompile(`\b\d(?:[ -]?\d){12,18}\b`),
+		re:       mustCompile(`\b\d(?:[ -]?\d){12,18}\b`),
 		validate: func(matched []byte) bool {
 			digits := digitsOnly(string(matched))
 			if len(digits) < 13 || len(digits) > 19 {

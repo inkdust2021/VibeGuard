@@ -1,0 +1,18 @@
+services:
+  vibeguard:
+    build:
+      context: .
+      dockerfile: Dockerfile.onnx
+    image: vibeguard:onnx-local
+    container_name: vibeguard
+    ports:
+      - "127.0.0.1:28657:28657"
+    volumes:
+      - vibeguard-data:/root/.vibeguard
+      # 将本地模型挂载到容器默认路径（管理面板里 model_path 可留空）
+      - ./models/ner:/root/.vibeguard/models/ner:ro
+    restart: unless-stopped
+
+volumes:
+  vibeguard-data: {}
+

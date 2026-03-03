@@ -17,8 +17,8 @@ type SessionMapping struct {
 
 // SessionsResponse represents the sessions API response
 type SessionsResponse struct {
-	Total                    int              `json:"total"`
-	Mappings                 []SessionMapping `json:"mappings"`
+	Total                     int              `json:"total"`
+	Mappings                  []SessionMapping `json:"mappings"`
 	DeterministicPlaceholders bool             `json:"deterministic_placeholders"`
 }
 
@@ -68,8 +68,8 @@ func (a *Admin) getSessions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := SessionsResponse{
-		Total:                    len(result),
-		Mappings:                 result,
+		Total:                     len(result),
+		Mappings:                  result,
 		DeterministicPlaceholders: a.session.DeterministicPlaceholdersEnabled(),
 	}
 

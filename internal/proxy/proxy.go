@@ -28,11 +28,13 @@ import (
 	"github.com/inkdust2021/vibeguard/internal/cert"
 	"github.com/inkdust2021/vibeguard/internal/config"
 	"github.com/inkdust2021/vibeguard/internal/pii_next/keywords"
+	"github.com/inkdust2021/vibeguard/internal/pii_next/nlp"
 	"github.com/inkdust2021/vibeguard/internal/pii_next/pipeline"
-	"github.com/inkdust2021/vibeguard/internal/pii_next/presidio"
 	piirec "github.com/inkdust2021/vibeguard/internal/pii_next/recognizer"
+	"github.com/inkdust2021/vibeguard/internal/pii_next/rulelist"
 	"github.com/inkdust2021/vibeguard/internal/redact"
 	"github.com/inkdust2021/vibeguard/internal/restore"
+	"github.com/inkdust2021/vibeguard/internal/rulelists"
 	"github.com/inkdust2021/vibeguard/internal/session"
 	"github.com/inkdust2021/vibeguard/internal/stream"
 	"github.com/inkdust2021/vibeguard/internal/zstd"
@@ -64,6 +66,7 @@ type Server struct {
 	admin      *admin.Admin
 	certPath   string
 	keyPath    string
+	subMgr     *rulelists.SubscriptionManager
 }
 
 type auditCtx struct {
@@ -129,6 +132,9 @@ func NewServer(cfg *config.Manager, ca *cert.CA, certPath, keyPath string) (*Ser
 		keyPath:    keyPath,
 	}
 	server.applyConfig(c)
+	// 启用规则订阅后台更新：远端规则列表会被拉取、校验并缓存到本机目录，然后触发热重载。
+	server.subMgr = rulelists.NewSubscriptionManager(cfg, server.ReloadFromConfig)
+	server.subMgr.Start()
 
 	// Set up handlers
 	server.setupHandlers()
@@ -166,6 +172,9 @@ func (s *Server) Start() error {
 
 // Stop stops the proxy server
 func (s *Server) Stop() {
+	if s.subMgr != nil {
+		s.subMgr.Stop()
+	}
 	s.session.Close()
 	slog.Info("VibeGuard proxy stopped")
 }
@@ -316,7 +325,13 @@ func redactJSONBody(redactEng redact.Redactor, body []byte) (out []byte, matches
 		return nil, nil, false, fmt.Errorf("trailing JSON data")
 	}
 
-	redacted, matches, changed, err := redactJSONValue(redactEng, v)
+	// 重要：不要对整个 JSON 的所有字符串字段做“全量脱敏”。
+	// 这会误伤如 model/metadata/schema 等字段（尤其泛化识别会把时间戳/版本号误判为敏感信息），
+	// 造成上游 API 报错或行为异常。这里默认仅对“对话/提示词”相关字段做脱敏：
+	// - messages[].content / messages[].content[].text
+	// - input / input[].content / input[].content[].text
+	// 注意：为尽量减少对上游协议字段的干扰，默认不处理 system/metadata 等字段。
+	redacted, matches, changed, err := redactJSONValuePromptOnly(redactEng, v)
 	if err != nil {
 		return nil, nil, false, err
 	}
@@ -331,37 +346,37 @@ func redactJSONBody(redactEng redact.Redactor, body []byte) (out []byte, matches
 	return out, matches, true, nil
 }
 
-func redactJSONValue(redactEng redact.Redactor, v any) (out any, matches []redact.Match, changed bool, err error) {
+func redactPromptJSONStringValue(redactEng redact.Redactor, s string) (out any, matches []redact.Match, changed bool, err error) {
+	// 对 JSON 字符串字段：在“原始值”上做脱敏，然后再统一 JSON 转义。
+	// 这样可避免把 `\n` 之类的转义序列当作普通文本，影响 NLP/泛化识别效果。
+	redactedRaw, ms := redactEng.RedactWithMatches([]byte(s))
+	if len(ms) == 0 {
+		return s, nil, false, nil
+	}
+
+	b, err := json.Marshal(string(redactedRaw))
+	if err != nil {
+		return s, nil, false, err
+	}
+
+	// 用 RawMessage 直接注入已编码的 JSON 字符串（包含外层引号），避免二次转义与结构破坏。
+	raw := json.RawMessage(b)
+	if !json.Valid(raw) {
+		// 极端情况：用户配置的正则/关键词可能命中并破坏转义序列，导致无效 JSON 字符串。
+		// 为避免把无效 JSON 转发到上游，这里回退为“不改写该字段”。
+		return s, nil, false, nil
+	}
+
+	return raw, ms, true, nil
+}
+
+func redactJSONValuePromptOnly(redactEng redact.Redactor, v any) (out any, matches []redact.Match, changed bool, err error) {
 	switch vv := v.(type) {
-	case string:
-		escaped, err := jsonEscapeStringValue(vv)
-		if err != nil {
-			return v, nil, false, err
-		}
-
-		redactedEscaped, ms := redactEng.RedactWithMatches([]byte(escaped))
-		if len(ms) == 0 {
-			return v, nil, false, nil
-		}
-
-		// 用 RawMessage 直接注入“已转义后的 JSON 字符串”，避免二次转义与结构破坏。
-		raw := make(json.RawMessage, 0, len(redactedEscaped)+2)
-		raw = append(raw, '"')
-		raw = append(raw, redactedEscaped...)
-		raw = append(raw, '"')
-		if !json.Valid(raw) {
-			// 极端情况：用户配置的正则/关键词可能命中并破坏转义序列，导致无效 JSON 字符串。
-			// 为避免把无效 JSON 转发到上游，这里回退为“不改写该字段”。
-			return v, nil, false, nil
-		}
-
-		return raw, ms, true, nil
-
 	case []any:
 		anyChanged := false
 		var all []redact.Match
 		for i := range vv {
-			nv, ms, ch, err := redactJSONValue(redactEng, vv[i])
+			nv, ms, ch, err := redactJSONValuePromptOnly(redactEng, vv[i])
 			if err != nil {
 				return v, nil, false, err
 			}
@@ -379,7 +394,18 @@ func redactJSONValue(redactEng redact.Redactor, v any) (out any, matches []redac
 		anyChanged := false
 		var all []redact.Match
 		for k, val := range vv {
-			nv, ms, ch, err := redactJSONValue(redactEng, val)
+			var (
+				nv any
+				ms []redact.Match
+				ch bool
+			)
+
+			switch k {
+			case "messages", "input", "contents":
+				nv, ms, ch, err = redactJSONMessagesLike(redactEng, val)
+			default:
+				nv, ms, ch, err = redactJSONValuePromptOnly(redactEng, val)
+			}
 			if err != nil {
 				return v, nil, false, err
 			}
@@ -396,6 +422,215 @@ func redactJSONValue(redactEng redact.Redactor, v any) (out any, matches []redac
 	default:
 		return v, nil, false, nil
 	}
+}
+
+func redactJSONStringLike(redactEng redact.Redactor, v any) (out any, matches []redact.Match, changed bool, err error) {
+	s, ok := v.(string)
+	if !ok {
+		return v, nil, false, nil
+	}
+	return redactPromptJSONStringValue(redactEng, s)
+}
+
+func redactJSONSystemLike(redactEng redact.Redactor, v any) (out any, matches []redact.Match, changed bool, err error) {
+	switch vv := v.(type) {
+	case string:
+		return redactPromptJSONStringValue(redactEng, vv)
+	case []any:
+		anyChanged := false
+		var all []redact.Match
+		for i := range vv {
+			nv, ms, ch, err := redactJSONTextPart(redactEng, vv[i])
+			if err != nil {
+				return v, nil, false, err
+			}
+			if ch {
+				vv[i] = nv
+				anyChanged = true
+			}
+			if len(ms) > 0 {
+				all = append(all, ms...)
+			}
+		}
+		return vv, all, anyChanged, nil
+	case map[string]any:
+		// system 也可能是 {type,text} 或其他结构
+		return redactJSONTextPart(redactEng, vv)
+	default:
+		return v, nil, false, nil
+	}
+}
+
+func redactJSONMessagesLike(redactEng redact.Redactor, v any) (out any, matches []redact.Match, changed bool, err error) {
+	switch vv := v.(type) {
+	case string:
+		// 某些 API 直接用字符串作为 input/prompt
+		return redactPromptJSONStringValue(redactEng, vv)
+	case []any:
+		anyChanged := false
+		var all []redact.Match
+		for i := range vv {
+			nv, ms, ch, err := redactJSONMessageItem(redactEng, vv[i])
+			if err != nil {
+				return v, nil, false, err
+			}
+			if ch {
+				vv[i] = nv
+				anyChanged = true
+			}
+			if len(ms) > 0 {
+				all = append(all, ms...)
+			}
+		}
+		return vv, all, anyChanged, nil
+	case map[string]any:
+		// 极少数实现会把 messages/input 做成对象包装
+		return redactJSONValuePromptOnly(redactEng, vv)
+	default:
+		return v, nil, false, nil
+	}
+}
+
+func redactJSONMessageItem(redactEng redact.Redactor, v any) (out any, matches []redact.Match, changed bool, err error) {
+	switch vv := v.(type) {
+	case string:
+		return redactPromptJSONStringValue(redactEng, vv)
+	case map[string]any:
+		anyChanged := false
+		var all []redact.Match
+
+		// 常见：role + content
+		if c, ok := vv["content"]; ok {
+			nc, ms, ch, err := redactJSONMessageContent(redactEng, c)
+			if err != nil {
+				return v, nil, false, err
+			}
+			if ch {
+				vv["content"] = nc
+				anyChanged = true
+			}
+			if len(ms) > 0 {
+				all = append(all, ms...)
+			}
+		}
+
+		// Gemini：parts
+		if p, ok := vv["parts"]; ok {
+			np, ms, ch, err := redactJSONTextParts(redactEng, p)
+			if err != nil {
+				return v, nil, false, err
+			}
+			if ch {
+				vv["parts"] = np
+				anyChanged = true
+			}
+			if len(ms) > 0 {
+				all = append(all, ms...)
+			}
+		}
+
+		// OpenAI Responses：有时直接是 {type:"input_text", text:"..."}
+		if t, ok := vv["text"]; ok {
+			nt, ms, ch, err := redactJSONStringLike(redactEng, t)
+			if err != nil {
+				return v, nil, false, err
+			}
+			if ch {
+				vv["text"] = nt
+				anyChanged = true
+			}
+			if len(ms) > 0 {
+				all = append(all, ms...)
+			}
+		}
+
+		return vv, all, anyChanged, nil
+	default:
+		return v, nil, false, nil
+	}
+}
+
+func redactJSONMessageContent(redactEng redact.Redactor, v any) (out any, matches []redact.Match, changed bool, err error) {
+	switch vv := v.(type) {
+	case string:
+		return redactPromptJSONStringValue(redactEng, vv)
+	case []any:
+		return redactJSONTextParts(redactEng, vv)
+	case map[string]any:
+		// 兼容：content 也可能是 {text:"..."} 结构
+		return redactJSONTextPart(redactEng, vv)
+	default:
+		return v, nil, false, nil
+	}
+}
+
+func redactJSONTextParts(redactEng redact.Redactor, v any) (out any, matches []redact.Match, changed bool, err error) {
+	parts, ok := v.([]any)
+	if !ok {
+		return v, nil, false, nil
+	}
+
+	anyChanged := false
+	var all []redact.Match
+	for i := range parts {
+		nv, ms, ch, err := redactJSONTextPart(redactEng, parts[i])
+		if err != nil {
+			return v, nil, false, err
+		}
+		if ch {
+			parts[i] = nv
+			anyChanged = true
+		}
+		if len(ms) > 0 {
+			all = append(all, ms...)
+		}
+	}
+	return parts, all, anyChanged, nil
+}
+
+func redactJSONTextPart(redactEng redact.Redactor, v any) (out any, matches []redact.Match, changed bool, err error) {
+	switch vv := v.(type) {
+	case string:
+		return redactPromptJSONStringValue(redactEng, vv)
+	case map[string]any:
+		// 常见：{type:"text", text:"..."}
+		if t, ok := vv["text"]; ok {
+			if ts, ok := t.(string); ok && isSystemReminderText(ts) {
+				// Claude Code 这类客户端可能会把 <system-reminder> 注入到 messages[].content[] 里。
+				// 这些内容属于协议/运行时提示，不应被脱敏规则影响（即使命中关键词也不改写），
+				// 否则可能导致上游行为异常或客户端解析失败。
+				return vv, nil, false, nil
+			}
+			nt, ms, ch, err := redactJSONStringLike(redactEng, t)
+			if err != nil {
+				return v, nil, false, err
+			}
+			if ch {
+				vv["text"] = nt
+			}
+			return vv, ms, ch, err
+		}
+		return v, nil, false, nil
+	default:
+		return v, nil, false, nil
+	}
+}
+
+func isSystemReminderText(s string) bool {
+	t := strings.TrimSpace(s)
+	if t == "" {
+		return false
+	}
+	// 形如：
+	// <system-reminder>
+	// ...
+	// </system-reminder>
+	//
+	// 允许 <system-reminder ...> 这种扩展写法。
+	if !strings.HasPrefix(t, "<system-reminder") {
+		return false
+	}
+	return strings.Contains(t, "</system-reminder>")
 }
 
 func jsonEscapeStringValue(s string) (string, error) {
@@ -436,20 +671,46 @@ func (s *Server) setupHandlers() {
 			ContentType:     contentType,
 			ContentEncoding: contentEncoding,
 		}
-		recordAudit := func() {
+		var savedAudit admin.AuditEvent
+		recordAudit := func() admin.AuditEvent {
 			saved := s.admin.RecordAudit(auditEv)
+			savedAudit = saved
 			if ctx != nil {
 				ctx.UserData = auditCtx{
 					id:       saved.ID,
 					redacted: auditEv.RedactedCount > 0,
 				}
 			}
+			return saved
 		}
 		if !s.shouldIntercept(host) {
 			auditEv.Attempted = false
 			auditEv.Note = "pass_through"
 			recordAudit()
 			return req, nil // Pass through
+		}
+
+		dbg := s.admin.Debug()
+		dbgOn := dbg != nil && dbg.Enabled()
+		dbgMaxBody := 0
+		dbgMaskHeaders := true
+		if dbgOn {
+			dbgMaxBody = dbg.MaxBodyBytes()
+			dbgMaskHeaders = dbg.MaskHeaders()
+		}
+		var dbgReqHdrOrig http.Header
+		var dbgReqURL string
+		if dbgOn && req != nil {
+			dbgReqHdrOrig = req.Header.Clone()
+			if dbgMaskHeaders {
+				dbgReqHdrOrig = admin.MaskSensitiveHeaders(dbgReqHdrOrig)
+			}
+			if req.URL != nil {
+				dbgReqURL = strings.TrimSpace(req.URL.String())
+			}
+			if dbgReqURL == "" {
+				dbgReqURL = strings.TrimSpace(req.RequestURI)
+			}
 		}
 
 		slog.Debug("Intercepting request", "host", host, "method", req.Method, "path", req.URL.Path)
@@ -596,6 +857,24 @@ func (s *Server) setupHandlers() {
 			req.Header.Set("Content-Length", fmt.Sprintf("%d", len(outBody)))
 			req.TransferEncoding = nil
 			req.Header.Del("Transfer-Encoding")
+
+			if dbgOn && savedAudit.ID > 0 {
+				hdrFwd := req.Header.Clone()
+				if dbgMaskHeaders {
+					hdrFwd = admin.MaskSensitiveHeaders(hdrFwd)
+				}
+
+				origText, origBytes, origTrunc := clipBodyForDebug(body, dbgMaxBody)
+				fwdText, fwdBytes, fwdTrunc := clipBodyForDebug(outBody, dbgMaxBody)
+				dbg.UpsertRequest(savedAudit.ID, admin.DebugRequestCapture{
+					Time: savedAudit.Time,
+					Host: host, Method: method, Path: safeRequestPath(req), URL: dbgReqURL,
+					ContentType: contentType, ContentEncoding: contentEncodingHeader,
+					HeadersOriginal: dbgReqHdrOrig, HeadersForwarded: hdrFwd,
+					BodyOriginalText: origText, BodyOriginalBytes: origBytes, BodyOriginalTrunc: origTrunc,
+					BodyForwardedText: fwdText, BodyForwardedBytes: fwdBytes, BodyForwardedTrunc: fwdTrunc,
+				})
+			}
 		} else {
 			if req.Body == nil || req.Body == http.NoBody {
 				auditEv.Attempted = false
@@ -605,6 +884,18 @@ func (s *Server) setupHandlers() {
 				auditEv.Note = "not_text"
 			}
 			recordAudit()
+			if dbgOn && savedAudit.ID > 0 {
+				hdrFwd := req.Header.Clone()
+				if dbgMaskHeaders {
+					hdrFwd = admin.MaskSensitiveHeaders(hdrFwd)
+				}
+				dbg.UpsertRequest(savedAudit.ID, admin.DebugRequestCapture{
+					Time: savedAudit.Time,
+					Host: host, Method: method, Path: safeRequestPath(req), URL: dbgReqURL,
+					ContentType: contentType, ContentEncoding: contentEncoding,
+					HeadersOriginal: dbgReqHdrOrig, HeadersForwarded: hdrFwd,
+				})
+			}
 		}
 
 		return req, nil
@@ -635,6 +926,21 @@ func (s *Server) setupHandlers() {
 				auditID = v
 			}
 		}
+
+		dbg := s.admin.Debug()
+		dbgOn := dbg != nil && dbg.Enabled() && auditID > 0
+		dbgMaxBody := 0
+		dbgMaskHeaders := true
+		var dbgRespHdrOrig http.Header
+		if dbgOn {
+			dbgMaxBody = dbg.MaxBodyBytes()
+			dbgMaskHeaders = dbg.MaskHeaders()
+			dbgRespHdrOrig = resp.Header.Clone()
+			if dbgMaskHeaders {
+				dbgRespHdrOrig = admin.MaskSensitiveHeaders(dbgRespHdrOrig)
+			}
+		}
+
 		if auditID > 0 {
 			s.admin.UpdateAudit(auditID, func(ev *admin.AuditEvent) {
 				ev.ResponseStatus = resp.StatusCode
@@ -679,7 +985,38 @@ func (s *Server) setupHandlers() {
 				s.admin.UpdateAudit(auditID, func(ev *admin.AuditEvent) { ev.RestoreApplied = true })
 			}
 			stats.RestoredRequests.Add(1)
-			resp.Body = stream.NewSSERestoringReader(resp.Body, rt.restoreEng)
+			if dbgOn {
+				up := newCaptureBuffer(dbgMaxBody)
+				down := newCaptureBuffer(dbgMaxBody)
+				upstream := &captureReadCloser{rc: resp.Body, w: up}
+				restoring := stream.NewSSERestoringReader(upstream, rt.restoreEng)
+				// 下游 close 时再落库，避免在长 SSE 流中频繁加锁。
+				downstream := &captureReadCloser{
+					rc: restoring,
+					w:  down,
+					onClose: func() {
+						hdrFwd := resp.Header.Clone()
+						if dbgMaskHeaders {
+							hdrFwd = admin.MaskSensitiveHeaders(hdrFwd)
+						}
+						dbg.UpsertResponse(auditID, admin.DebugResponseCapture{
+							ContentType:       contentType,
+							Status:            resp.StatusCode,
+							HeadersOriginal:   dbgRespHdrOrig,
+							HeadersForwarded:  hdrFwd,
+							BodyUpstreamText:  up.Text(),
+							BodyUpstreamBytes: up.TotalBytes(),
+							BodyUpstreamTrunc: up.Truncated(),
+							BodyClientText:    down.Text(),
+							BodyClientBytes:   down.TotalBytes(),
+							BodyClientTrunc:   down.Truncated(),
+						})
+					},
+				}
+				resp.Body = downstream
+			} else {
+				resp.Body = stream.NewSSERestoringReader(resp.Body, rt.restoreEng)
+			}
 			resp.ContentLength = -1
 			resp.Header.Del("Content-Length")
 			return resp
@@ -700,7 +1037,37 @@ func (s *Server) setupHandlers() {
 					s.admin.UpdateAudit(auditID, func(ev *admin.AuditEvent) { ev.RestoreApplied = true })
 				}
 				stats.RestoredRequests.Add(1)
-				resp.Body = stream.NewRestoringReader(resp.Body, rt.restoreEng)
+				if dbgOn {
+					up := newCaptureBuffer(dbgMaxBody)
+					down := newCaptureBuffer(dbgMaxBody)
+					upstream := &captureReadCloser{rc: resp.Body, w: up}
+					restoring := stream.NewRestoringReader(upstream, rt.restoreEng)
+					downstream := &captureReadCloser{
+						rc: restoring,
+						w:  down,
+						onClose: func() {
+							hdrFwd := resp.Header.Clone()
+							if dbgMaskHeaders {
+								hdrFwd = admin.MaskSensitiveHeaders(hdrFwd)
+							}
+							dbg.UpsertResponse(auditID, admin.DebugResponseCapture{
+								ContentType:       contentType,
+								Status:            resp.StatusCode,
+								HeadersOriginal:   dbgRespHdrOrig,
+								HeadersForwarded:  hdrFwd,
+								BodyUpstreamText:  up.Text(),
+								BodyUpstreamBytes: up.TotalBytes(),
+								BodyUpstreamTrunc: up.Truncated(),
+								BodyClientText:    down.Text(),
+								BodyClientBytes:   down.TotalBytes(),
+								BodyClientTrunc:   down.Truncated(),
+							})
+						},
+					}
+					resp.Body = downstream
+				} else {
+					resp.Body = stream.NewRestoringReader(resp.Body, rt.restoreEng)
+				}
 				resp.ContentLength = -1
 				resp.Header.Del("Content-Length")
 				return resp
@@ -744,6 +1111,27 @@ func (s *Server) setupHandlers() {
 			resp.Header.Set("Content-Length", fmt.Sprintf("%d", len(restored)))
 			resp.TransferEncoding = nil
 			resp.Header.Del("Transfer-Encoding")
+
+			if dbgOn {
+				hdrFwd := resp.Header.Clone()
+				if dbgMaskHeaders {
+					hdrFwd = admin.MaskSensitiveHeaders(hdrFwd)
+				}
+				upText, upBytes, upTrunc := clipBodyForDebug(body, dbgMaxBody)
+				downText, downBytes, downTrunc := clipBodyForDebug(restored, dbgMaxBody)
+				dbg.UpsertResponse(auditID, admin.DebugResponseCapture{
+					ContentType:       contentType,
+					Status:            resp.StatusCode,
+					HeadersOriginal:   dbgRespHdrOrig,
+					HeadersForwarded:  hdrFwd,
+					BodyUpstreamText:  upText,
+					BodyUpstreamBytes: upBytes,
+					BodyUpstreamTrunc: upTrunc,
+					BodyClientText:    downText,
+					BodyClientBytes:   downBytes,
+					BodyClientTrunc:   downTrunc,
+				})
+			}
 			return resp
 		}
 
@@ -753,7 +1141,37 @@ func (s *Server) setupHandlers() {
 				s.admin.UpdateAudit(auditID, func(ev *admin.AuditEvent) { ev.RestoreApplied = true })
 			}
 			stats.RestoredRequests.Add(1)
-			resp.Body = stream.NewRestoringReader(resp.Body, rt.restoreEng)
+			if dbgOn {
+				up := newCaptureBuffer(dbgMaxBody)
+				down := newCaptureBuffer(dbgMaxBody)
+				upstream := &captureReadCloser{rc: resp.Body, w: up}
+				restoring := stream.NewRestoringReader(upstream, rt.restoreEng)
+				downstream := &captureReadCloser{
+					rc: restoring,
+					w:  down,
+					onClose: func() {
+						hdrFwd := resp.Header.Clone()
+						if dbgMaskHeaders {
+							hdrFwd = admin.MaskSensitiveHeaders(hdrFwd)
+						}
+						dbg.UpsertResponse(auditID, admin.DebugResponseCapture{
+							ContentType:       contentType,
+							Status:            resp.StatusCode,
+							HeadersOriginal:   dbgRespHdrOrig,
+							HeadersForwarded:  hdrFwd,
+							BodyUpstreamText:  up.Text(),
+							BodyUpstreamBytes: up.TotalBytes(),
+							BodyUpstreamTrunc: up.Truncated(),
+							BodyClientText:    down.Text(),
+							BodyClientBytes:   down.TotalBytes(),
+							BodyClientTrunc:   down.Truncated(),
+						})
+					},
+				}
+				resp.Body = downstream
+			} else {
+				resp.Body = stream.NewRestoringReader(resp.Body, rt.restoreEng)
+			}
 			resp.ContentLength = -1
 			resp.Header.Del("Content-Length")
 			return resp
@@ -766,7 +1184,37 @@ func (s *Server) setupHandlers() {
 				s.admin.UpdateAudit(auditID, func(ev *admin.AuditEvent) { ev.RestoreApplied = true })
 			}
 			stats.RestoredRequests.Add(1)
-			resp.Body = stream.NewRestoringReader(resp.Body, rt.restoreEng)
+			if dbgOn {
+				up := newCaptureBuffer(dbgMaxBody)
+				down := newCaptureBuffer(dbgMaxBody)
+				upstream := &captureReadCloser{rc: resp.Body, w: up}
+				restoring := stream.NewRestoringReader(upstream, rt.restoreEng)
+				downstream := &captureReadCloser{
+					rc: restoring,
+					w:  down,
+					onClose: func() {
+						hdrFwd := resp.Header.Clone()
+						if dbgMaskHeaders {
+							hdrFwd = admin.MaskSensitiveHeaders(hdrFwd)
+						}
+						dbg.UpsertResponse(auditID, admin.DebugResponseCapture{
+							ContentType:       contentType,
+							Status:            resp.StatusCode,
+							HeadersOriginal:   dbgRespHdrOrig,
+							HeadersForwarded:  hdrFwd,
+							BodyUpstreamText:  up.Text(),
+							BodyUpstreamBytes: up.TotalBytes(),
+							BodyUpstreamTrunc: up.Truncated(),
+							BodyClientText:    down.Text(),
+							BodyClientBytes:   down.TotalBytes(),
+							BodyClientTrunc:   down.Truncated(),
+						})
+					},
+				}
+				resp.Body = downstream
+			} else {
+				resp.Body = stream.NewRestoringReader(resp.Body, rt.restoreEng)
+			}
 			resp.ContentLength = -1
 			resp.Header.Del("Content-Length")
 			return resp
@@ -919,28 +1367,89 @@ func (s *Server) applyConfig(c config.Config) {
 		exclude = append(exclude, ex)
 	}
 
-	// 当前版本管理页仅支持关键词匹配；若用户配置了 regex/builtin，提示但不启用，
+	// 管理页不直接编辑 regex/builtin：推荐使用“规则列表（.vgrules）”来承载可复用的通用正则/关键词规则。
+	// 若用户仍在配置文件中填写了 regex/builtin，这里会提示但不启用，
 	// 避免“过宽正则误伤整段文本”的情况。
 	if len(c.Patterns.Regex) > 0 || len(c.Patterns.Builtin) > 0 {
-		slog.Warn("Ignoring regex/builtin patterns; only keywords (and optional Presidio) are enabled",
+		slog.Warn("Ignoring regex/builtin patterns; use rule lists for reusable regex/keywords",
 			"regex", len(c.Patterns.Regex),
 			"builtin", len(c.Patterns.Builtin),
 		)
 	}
 
+	var ruleRecs []piirec.Recognizer
+	for _, rl := range c.Patterns.RuleLists {
+		if !rl.Enabled {
+			continue
+		}
+		path := ""
+		if strings.TrimSpace(rl.URL) != "" {
+			if p, ok := rulelists.SubscriptionRulesPath(rl); ok {
+				path = p
+			}
+		} else {
+			path = resolveRuleListPath(rl.Path)
+		}
+		if strings.TrimSpace(path) == "" {
+			continue
+		}
+		name := strings.TrimSpace(rl.Name)
+		if name == "" {
+			name = strings.TrimSpace(rl.ID)
+		}
+		if name == "" {
+			name = filepath.Base(path)
+		}
+		if _, err := os.Stat(path); err != nil {
+			if strings.TrimSpace(rl.URL) != "" {
+				slog.Warn("Rule list subscription not available yet; continuing without it", "url", rl.URL)
+			} else {
+				slog.Warn("Rule list file not found; continuing without it", "path", rl.Path)
+			}
+			continue
+		}
+		rec, err := rulelist.ParseFile(path, rulelist.ParseOptions{
+			Name:     name,
+			Priority: rl.Priority,
+		})
+		if err != nil {
+			if strings.TrimSpace(rl.URL) != "" {
+				slog.Warn("Failed to load rule list subscription; continuing without it", "error", err, "url", rl.URL)
+			} else {
+				slog.Warn("Failed to load rule list; continuing without it", "error", err, "path", rl.Path)
+			}
+			continue
+		}
+		ruleRecs = append(ruleRecs, rec)
+	}
+
 	var redactor redact.Redactor
-	if c.Patterns.Presidio.Enabled {
+	if len(ruleRecs) > 0 || c.Patterns.NLP.Enabled {
 		var merged []piirec.Recognizer
 		// 关键词：合并为一个 recognizer，避免重复扫描。
 		if len(kws) > 0 {
 			merged = append(merged, keywords.New(kws))
 		}
 
-		presidioRecs, unknown := presidio.NewRecognizers(c.Patterns.Presidio.Recognizers)
-		if len(unknown) > 0 {
-			slog.Warn("Unknown Presidio recognizers ignored", "unknown", unknown)
+		merged = append(merged, ruleRecs...)
+
+		if c.Patterns.NLP.Enabled {
+			rec, err := nlp.New(nlp.Options{
+				Engine:          c.Patterns.NLP.Engine,
+				ModelPath:       c.Patterns.NLP.ModelPath,
+				RouteByLang:     c.Patterns.NLP.RouteByLang,
+				ModelPathEN:     c.Patterns.NLP.ModelPathEN,
+				ModelPathZH:     c.Patterns.NLP.ModelPathZH,
+				MaxLoadedModels: c.Patterns.NLP.MaxLoadedModels,
+				Entities:        c.Patterns.NLP.Entities,
+				MinScore:        c.Patterns.NLP.MinScore,
+			})
+			if err != nil {
+				slog.Warn("Failed to init NLP recognizer; continuing without NLP", "error", err)
+			} else if rec != nil {
+				merged = append(merged, rec)
+			}
 		}
-		merged = append(merged, presidioRecs...)
 
 		p := pipeline.New(s.session, prefix, merged...)
 		p.SetExclude(exclude)
@@ -993,7 +1502,8 @@ func (s *Server) ReloadFromConfig() {
 		"targets", len(rt.targets),
 		"deterministic_placeholders", c.Session.DeterministicPlaceholders,
 		"keywords", len(c.Patterns.Keywords),
-		"presidio_enabled", c.Patterns.Presidio.Enabled,
+		"rule_lists", len(c.Patterns.RuleLists),
+		"nlp_enabled", c.Patterns.NLP.Enabled,
 		"exclude", len(c.Patterns.Exclude),
 	)
 }
@@ -1154,6 +1664,25 @@ func resolveSessionWALPath(path string) string {
 	p := strings.TrimSpace(path)
 	if p == "" {
 		return filepath.Join(config.GetConfigDir(), "session.wal")
+	}
+	if p == "~" {
+		if home, err := os.UserHomeDir(); err == nil && strings.TrimSpace(home) != "" {
+			return home
+		}
+		return p
+	}
+	if strings.HasPrefix(p, "~/") || strings.HasPrefix(p, "~"+string(os.PathSeparator)) {
+		if home, err := os.UserHomeDir(); err == nil && strings.TrimSpace(home) != "" {
+			return filepath.Join(home, p[2:])
+		}
+	}
+	return p
+}
+
+func resolveRuleListPath(path string) string {
+	p := strings.TrimSpace(path)
+	if p == "" {
+		return p
 	}
 	if p == "~" {
 		if home, err := os.UserHomeDir(); err == nil && strings.TrimSpace(home) != "" {

@@ -72,42 +72,18 @@ func SanitizeCategory(s string) string {
 	return out
 }
 
-// SanitizeRecognizerName 清理并规范化内置识别器名称（用于 patterns.presidio.recognizers）。
-// 规则：
-// - 自动转小写
-// - 将空白与 '-' 归一为 '_'
-// - 仅保留 [a-z0-9_]
-// - 空结果返回空字符串
-func SanitizeRecognizerName(s string) string {
+// SanitizeNLPEngine 清理并规范化 NLP 引擎名称（用于 patterns.nlp.engine）。
+// 允许值：heuristic|onnx。空或非法值返回空字符串（由上层回退默认）。
+func SanitizeNLPEngine(s string) string {
 	s = SanitizePatternValue(s)
 	if s == "" {
 		return ""
 	}
 	s = strings.ToLower(s)
-	var b strings.Builder
-	b.Grow(len(s))
-	lastUnderscore := false
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		switch {
-		case c >= 'a' && c <= 'z':
-			b.WriteByte(c)
-			lastUnderscore = false
-		case c >= '0' && c <= '9':
-			b.WriteByte(c)
-			lastUnderscore = false
-		case c == '_' || c == '-' || unicode.IsSpace(rune(c)):
-			if !lastUnderscore {
-				b.WriteByte('_')
-				lastUnderscore = true
-			}
-		default:
-			// drop
-		}
-	}
-	out := strings.Trim(b.String(), "_")
-	if out == "" {
+	switch s {
+	case "heuristic", "onnx":
+		return s
+	default:
 		return ""
 	}
-	return out
 }

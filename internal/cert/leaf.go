@@ -95,7 +95,7 @@ func (m *LeafCertManager) generateLeafCert(host string) (*tls.Certificate, error
 			x509.ExtKeyUsageServerAuth,
 			x509.ExtKeyUsageClientAuth,
 		},
-		DNSNames:     []string{host},
+		DNSNames: []string{host},
 	}
 
 	// Sign with CA

@@ -66,8 +66,8 @@
     .lang-switch { cursor: pointer; padding: 4px 8px; border-radius: 4px; font-size: 12px; transition: all 0.2s ease; }
     .lang-switch:hover { background: #f1f5f9; transform: scale(1.1); }
     .lang-switch.active { background: #3b82f6; color: white; }
-    .github-logo { transition: all 0.3s ease; }
-    .github-logo:hover { transform: rotate(360deg) scale(1.1); }
+    .github-logo { transition: transform 0.2s ease, opacity 0.2s ease; }
+    .github-logo:hover { transform: scale(1.06); opacity: 0.92; }
     .loading-skeleton { background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
     .pattern-item { animation: slideUp 0.3s ease-out backwards; }
     .pattern-item:nth-child(1) { animation-delay: 0.05s; }
@@ -95,10 +95,8 @@
     <aside class="w-64 bg-white border-r border-border flex flex-col">
       <div class="p-6 border-b border-border">
         <h1 class="text-xl font-bold text-text flex items-center gap-2">
-          <a href="https://github.com/inkdust2021/VibeGuard" target="_blank" rel="noopener noreferrer" class="github-logo flex items-center gap-2 hover:text-accent" title="GitHub">
-            <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-            </svg>
+          <a href="https://github.com/inkdust2021/VibeGuard" target="_blank" rel="noopener noreferrer" class="github-logo flex items-center gap-2" title="VibeGuard">
+            <img src="/manager/logo.png" class="w-8 h-8" alt="VibeGuard" />
           </a>
           VibeGuard
         </h1>
@@ -113,9 +111,17 @@
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11c1.657 0 3-1.343 3-3S13.657 5 12 5 9 6.343 9 8s1.343 3 3 3zm0 0c-3.314 0-6 1.79-6 4v2h12v-2c0-2.21-2.686-4-6-4z"/></svg>
           <span data-i18n="nav.audit">拦截记录</span>
         </a>
-        <a href="#/patterns" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-text mb-1" data-page="patterns">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg>
-          <span data-i18n="nav.patterns">匹配规则</span>
+        <a href="#/rule_lists" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-text mb-1" data-page="rule_lists">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+          <span data-i18n="nav.ruleLists">规则列表</span>
+        </a>
+        <a href="#/keywords" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-text mb-1" data-page="keywords">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M3 11l6 6a2 2 0 002.828 0l7.586-7.586a2 2 0 000-2.828L13.828 2H7a4 4 0 00-4 4v5z"/></svg>
+          <span data-i18n="nav.keywords">关键词列表</span>
+        </a>
+        <a href="#/nlp" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-text mb-1" data-page="nlp">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3l1.2 3.6L17 8l-3.8 1.4L12 13l-1.2-3.6L7 8l3.8-1.4L12 3zM5 13l.9 2.7L9 17l-3.1 1.3L5 21l-.9-2.7L1 17l3.1-1.3L5 13zM19 13l.9 2.7L23 17l-3.1 1.3L19 21l-.9-2.7L15 17l3.1-1.3L19 13z"/></svg>
+          <span data-i18n="nav.nlp">NLP</span>
         </a>
         <a href="#/sessions" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-text mb-1" data-page="sessions">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/></svg>
@@ -128,6 +134,10 @@
         <a href="#/logs" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-text" data-page="logs">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6M7 7h10a2 2 0 012 2v10a2 2 0 01-2 2H7a2 2 0 01-2-2V9a2 2 0 012-2z"/></svg>
           <span data-i18n="nav.logs">调试日志</span>
+        </a>
+        <a href="#/debug" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-text" data-page="debug">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z"/></svg>
+          <span data-i18n="nav.debug">调试抓包</span>
         </a>
       </nav>
       <div class="p-4 border-t border-border">
@@ -151,16 +161,19 @@
   <script>
 // i18n translations
 const i18n = {
-  zh: {
-    'app.title': 'VibeGuard 管理面板',
-    subtitle: '隐私代理管理',
-    'nav.dashboard': '仪表盘',
-    'nav.audit': '拦截记录',
-    'nav.patterns': '匹配规则',
-    'nav.sessions': '会话映射',
-    'nav.certs': '证书管理',
-    'nav.logs': '调试日志',
-    'status.running': '运行中',
+	  zh: {
+	    'app.title': 'VibeGuard 管理面板',
+	    subtitle: '隐私代理管理',
+	    'nav.dashboard': '仪表盘',
+	    'nav.audit': '拦截记录',
+	    'nav.ruleLists': '规则列表',
+	    'nav.keywords': '关键词列表',
+	    'nav.nlp': 'NLP',
+	    'nav.sessions': '会话映射',
+	    'nav.certs': '证书管理',
+	    'nav.logs': '调试日志',
+	    'nav.debug': '调试抓包',
+	    'status.running': '运行中',
     'auth.setup.title': '设置管理密码',
     'auth.setup.subtitle': '首次访问管理面板需要设置一个密码，用于保护本机管理端 API。',
     'auth.login.title': '管理员登录',
@@ -195,32 +208,83 @@ const i18n = {
     'dashboard.status': '状态',
     'dashboard.listenAddress': '监听地址',
     'dashboard.uptime': '运行时间',
-    'dashboard.sessionInfo': '会话信息',
-    'dashboard.ttl': '有效期',
-    'dashboard.maxMappings': '最大映射数',
-    'dashboard.utilization': '使用率',
-    'patterns.title': '匹配规则',
-    'patterns.subtitle': '在这里配置关键词规则与排除项。',
-    'presidio.title': '泛化匹配（Presidio）',
-    'presidio.subtitle': '无需正则，自动识别常见敏感信息（可与关键词同时使用）',
-    'presidio.hint': '开启后会额外识别邮箱、电话、信用卡号、IBAN、SSN、IP、UUID 等，并替换为占位符。',
-    'presidio.recognizers': '识别类型',
-    'presidio.atLeastOne': '请至少选择一种识别类型',
-    'presidio.rec.email': '邮箱',
-    'presidio.rec.phone': '电话',
-    'presidio.rec.url': 'URL',
-    'presidio.rec.ip': 'IP（v4/v6）',
-    'presidio.rec.mac': 'MAC',
-    'presidio.rec.uuid': 'UUID',
-    'presidio.rec.credit_card': '信用卡（Luhn 校验）',
-    'presidio.rec.iban': 'IBAN（校验）',
-    'presidio.rec.ssn': 'SSN',
-    'presidio.rec.crypto': '加密地址（BTC/ETH）',
-    'presidio.on': '已开启',
-    'presidio.off': '已关闭',
-    'presidio.updated': 'Presidio 设置已更新',
-    'presidio.updateFailed': 'Presidio 设置更新失败',
-    'patterns.regex': '关键词',
+	    'dashboard.sessionInfo': '会话信息',
+	    'dashboard.ttl': '有效期',
+	    'dashboard.maxMappings': '最大映射数',
+	    'dashboard.utilization': '使用率',
+	    'ruleLists.title': '规则列表',
+	    'ruleLists.subtitle': '上传/启用订阅式规则文件（.vgrules），更适合通用规则。',
+	    'ruleLists.upload': '上传规则列表',
+	    'ruleLists.noRuleLists': '未配置规则列表',
+	    'keywords.title': '关键词列表',
+	    'keywords.subtitle': '适合具体词条（姓名/项目代号/密钥片段）；通用规则建议放到规则列表。',
+	    'ruleLists.name': '名称（可选）',
+	    'ruleLists.namePlaceholder': '例如：通用敏感信息规则',
+	    'ruleLists.priority': '优先级（1~99）',
+	    'ruleLists.priorityHint': '越大越优先保留；关键词默认为 100。',
+	    'ruleLists.file': '规则文件',
+    'ruleLists.fileHint': '格式：逐行 keyword/regex；注释行以 #、//、;、! 开头。',
+    'ruleLists.subscribe': '添加订阅',
+    'ruleLists.subscribeTitle': '添加规则订阅',
+    'ruleLists.url': '订阅 URL',
+    'ruleLists.urlPlaceholder': 'https://example.com/list.vgrules',
+    'ruleLists.sigUrl': '签名 URL（推荐）',
+    'ruleLists.sigUrlPlaceholder': 'https://example.com/list.vgrules.sig',
+    'ruleLists.pubKey': '公钥（ed25519）',
+    'ruleLists.pubKeyPlaceholder': 'base64 或 64 位 hex',
+    'ruleLists.sha256': 'SHA-256（可选）',
+    'ruleLists.sha256Placeholder': '64 位 hex（固定版本用）',
+    'ruleLists.updateInterval': '更新间隔',
+    'ruleLists.updateIntervalPlaceholder': '例如 24h',
+	    'ruleLists.allowHTTP': '允许 HTTP（不推荐）',
+	    'ruleLists.urlRequired': '请填写订阅 URL',
+	    'ruleLists.verifyRequired': '订阅必须提供 sig_url+pubkey 或 sha256（至少一种）',
+	    'ruleLists.subscribeFailed': '订阅添加失败',
+	    'ruleLists.subscribed': '订阅已添加',
+	    'ruleLists.verifyOk': '已校验',
+	    'ruleLists.verifyPending': '未校验',
+	    'ruleLists.verifyFailed': '校验失败',
+    'ruleLists.kind.subscription': '订阅',
+    'ruleLists.kind.local': '本地',
+    'ruleLists.enabled': '已启用',
+    'ruleLists.disabled': '已禁用',
+    'ruleLists.missing': '文件缺失',
+    'ruleLists.uploaded': '规则列表已上传',
+    'ruleLists.uploadFailed': '上传失败',
+    'ruleLists.fileRequired': '请选择规则文件',
+    'ruleLists.updated': '规则列表已更新',
+    'ruleLists.updateFailed': '规则列表更新失败',
+    'ruleLists.deleteConfirm': '确定删除此规则列表？',
+    'ruleLists.deleted': '规则列表已删除',
+    'ruleLists.deleteFailed': '删除失败',
+    'ruleLists.deleteUnavailable': '缺少 ID，请在配置文件中移除',
+	    'nlp.title': '泛化实体识别（NLP）',
+	    'nlp.subtitle': '识别人名/组织/位置等（可与关键词同时使用）',
+	    'nlp.hint': '开启后会尝试识别文本中的实体并替换为占位符。启发式更保守；ONNX 需额外运行库与模型文件。模型路径留空时将优先尝试 ~/.vibeguard/models/ner。',
+	    'nlp.optionalNote': '提示：NLP 默认更偏英文；中文/多语言需自行配置 ONNX 模型路径。',
+	    'nlp.advanced': '高级设置',
+    'nlp.engine': '引擎',
+    'nlp.engine.heuristic': '启发式（内置）',
+    'nlp.engine.onnx': 'ONNX（需额外组件）',
+    'nlp.engine.onnxUnavailable': '当前构建未包含 ONNX 支持',
+    'nlp.modelPath': '模型路径',
+    'nlp.routeByLang': '按语言路由',
+    'nlp.routeByLangHint': '分别配置英文/中文模型路径；按需加载更省内存。',
+    'nlp.modelPathEn': '英文模型路径',
+    'nlp.modelPathZh': '中文模型路径',
+    'nlp.maxLoadedModels': '最大常驻模型数',
+    'nlp.maxLoadedModelsHint': '1 最省内存；2 语言切换更快。',
+    'nlp.minScore': '最小置信度',
+    'nlp.entities': '实体类型',
+    'nlp.atLeastOne': '请至少选择一种实体类型',
+    'nlp.entity.person': '人名',
+    'nlp.entity.org': '组织',
+    'nlp.entity.location': '位置',
+    'nlp.on': '已开启',
+    'nlp.off': '已关闭',
+    'nlp.updated': 'NLP 设置已更新',
+    'nlp.updateFailed': 'NLP 设置更新失败',
+    'patterns.regex': '关键词列表',
     'patterns.add': '添加',
     'patterns.noRegex': '未配置关键词',
     'patterns.loading': '加载中...',
@@ -319,6 +383,25 @@ const i18n = {
     'logs.empty': '暂无日志（可尝试把 log.level 设为 debug 并重启 vibeguard）',
     'logs.connecting': '连接中...',
     'logs.reconnecting': '断开，正在重连...',
+    'debug.title': '调试抓包',
+    'debug.subtitle': '捕获并展示完整请求/响应（用于定位哪些字段被错误处理）。仅保存在内存中。',
+    'debug.enable': '启用抓包',
+    'debug.maxBodyBytes': 'Body 上限',
+    'debug.maskHeaders': '打码敏感 Header',
+    'debug.refresh': '刷新',
+    'debug.clear': '清空',
+    'debug.empty': '暂无抓包数据（先开启抓包，然后发起一次请求）。',
+    'debug.view': '查看详情',
+    'debug.detail.title': '抓包详情',
+    'debug.detail.request': '请求',
+    'debug.detail.response': '响应',
+    'debug.detail.headersOriginal': '原始 Header',
+    'debug.detail.headersForwarded': '转发后 Header',
+    'debug.detail.bodyOriginal': '原始 Body',
+    'debug.detail.bodyForwarded': '转发后 Body',
+    'debug.detail.truncated': '已截断',
+    'debug.detail.copy': '复制',
+    'debug.detail.close': '关闭',
     'audit.title': '拦截记录',
     'audit.subtitle': '每次请求是否命中脱敏规则，以及命中的内容（默认仅显示预览）',
     'audit.clear': '清空',
@@ -367,16 +450,19 @@ const i18n = {
     'audit.connecting': '正在连接...',
     'audit.reconnecting': '连接断开，正在重连...'
   },
-  en: {
-    'app.title': 'VibeGuard Admin Panel',
-    subtitle: 'Privacy Proxy Admin',
-    'nav.dashboard': 'Dashboard',
-    'nav.audit': 'Audit',
-    'nav.patterns': 'Patterns',
-    'nav.sessions': 'Sessions',
-    'nav.certs': 'Certificates',
-    'nav.logs': 'Debug Logs',
-    'status.running': 'Running',
+	  en: {
+	    'app.title': 'VibeGuard Admin Panel',
+	    subtitle: 'Privacy Proxy Admin',
+	    'nav.dashboard': 'Dashboard',
+	    'nav.audit': 'Audit',
+	    'nav.ruleLists': 'Rule Lists',
+	    'nav.keywords': 'Keywords',
+	    'nav.nlp': 'NLP',
+	    'nav.sessions': 'Sessions',
+	    'nav.certs': 'Certificates',
+	    'nav.logs': 'Debug Logs',
+	    'nav.debug': 'Packet Capture',
+	    'status.running': 'Running',
     'auth.setup.title': 'Set Admin Password',
     'auth.setup.subtitle': 'First-time access requires setting a password to protect the local admin API.',
     'auth.login.title': 'Admin Login',
@@ -411,31 +497,82 @@ const i18n = {
     'dashboard.status': 'Status',
     'dashboard.listenAddress': 'Listen Address',
     'dashboard.uptime': 'Uptime',
-    'dashboard.sessionInfo': 'Session Info',
-    'dashboard.ttl': 'TTL',
-    'dashboard.maxMappings': 'Max Mappings',
-    'dashboard.utilization': 'Utilization',
-    'patterns.title': 'Patterns',
-    'patterns.subtitle': 'Manage keyword rules and exclusions.',
-    'presidio.title': 'Generic PII (Presidio)',
-    'presidio.subtitle': 'No regex needed; detects common PII alongside keywords',
-    'presidio.hint': 'When enabled, it additionally detects emails, phones, credit cards, IBAN, SSN, IP, UUID, etc. and replaces them with placeholders.',
-    'presidio.recognizers': 'Recognizers',
-    'presidio.atLeastOne': 'Select at least one recognizer',
-    'presidio.rec.email': 'Email',
-    'presidio.rec.phone': 'Phone',
-    'presidio.rec.url': 'URL',
-    'presidio.rec.ip': 'IP (v4/v6)',
-    'presidio.rec.mac': 'MAC',
-    'presidio.rec.uuid': 'UUID',
-    'presidio.rec.credit_card': 'Credit card (Luhn)',
-    'presidio.rec.iban': 'IBAN (checksum)',
-    'presidio.rec.ssn': 'SSN',
-    'presidio.rec.crypto': 'Crypto (BTC/ETH)',
-    'presidio.on': 'Enabled',
-    'presidio.off': 'Disabled',
-    'presidio.updated': 'Presidio settings updated',
-    'presidio.updateFailed': 'Failed to update Presidio',
+	    'dashboard.sessionInfo': 'Session Info',
+	    'dashboard.ttl': 'TTL',
+	    'dashboard.maxMappings': 'Max Mappings',
+	    'dashboard.utilization': 'Utilization',
+	    'ruleLists.title': 'Rule Lists',
+	    'ruleLists.subtitle': 'Upload/enable subscription-like rule files (.vgrules) for generic rules.',
+	    'ruleLists.upload': 'Upload Rule List',
+	    'ruleLists.noRuleLists': 'No rule lists configured',
+	    'keywords.title': 'Keywords',
+	    'keywords.subtitle': 'Best for specific tokens (names, codenames, secret fragments). Put reusable rules into rule lists.',
+	    'ruleLists.name': 'Name (optional)',
+	    'ruleLists.namePlaceholder': 'e.g., Generic PII rules',
+	    'ruleLists.priority': 'Priority (1-99)',
+	    'ruleLists.priorityHint': 'Higher wins on overlaps; keywords default to 100.',
+	    'ruleLists.file': 'Rule file',
+    'ruleLists.fileHint': 'Line-based keyword/regex rules; comments start with #, //, ;, !',
+    'ruleLists.subscribe': 'Add subscription',
+    'ruleLists.subscribeTitle': 'Add rule subscription',
+    'ruleLists.url': 'Subscription URL',
+    'ruleLists.urlPlaceholder': 'https://example.com/list.vgrules',
+    'ruleLists.sigUrl': 'Signature URL (recommended)',
+    'ruleLists.sigUrlPlaceholder': 'https://example.com/list.vgrules.sig',
+    'ruleLists.pubKey': 'Public key (ed25519)',
+    'ruleLists.pubKeyPlaceholder': 'base64 or 64-char hex',
+    'ruleLists.sha256': 'SHA-256 (optional)',
+    'ruleLists.sha256Placeholder': '64-char hex (pin a version)',
+    'ruleLists.updateInterval': 'Update interval',
+    'ruleLists.updateIntervalPlaceholder': 'e.g. 24h',
+	    'ruleLists.allowHTTP': 'Allow HTTP (unsafe)',
+	    'ruleLists.urlRequired': 'URL is required',
+	    'ruleLists.verifyRequired': 'Provide sig_url+pubkey or sha256 (at least one)',
+	    'ruleLists.subscribeFailed': 'Failed to add subscription',
+	    'ruleLists.subscribed': 'Subscription added',
+	    'ruleLists.verifyOk': 'Verified',
+	    'ruleLists.verifyPending': 'Unverified',
+	    'ruleLists.verifyFailed': 'Verification failed',
+    'ruleLists.kind.subscription': 'Subscription',
+    'ruleLists.kind.local': 'Local',
+    'ruleLists.enabled': 'Enabled',
+    'ruleLists.disabled': 'Disabled',
+    'ruleLists.missing': 'Missing file',
+    'ruleLists.uploaded': 'Rule list uploaded',
+    'ruleLists.uploadFailed': 'Upload failed',
+    'ruleLists.fileRequired': 'Please choose a rule file',
+    'ruleLists.updated': 'Rule list updated',
+    'ruleLists.updateFailed': 'Failed to update rule list',
+    'ruleLists.deleteConfirm': 'Delete this rule list?',
+    'ruleLists.deleted': 'Rule list deleted',
+    'ruleLists.deleteFailed': 'Delete failed',
+    'ruleLists.deleteUnavailable': 'No ID; remove it in config',
+	    'nlp.title': 'Generic Entities (NLP)',
+	    'nlp.subtitle': 'Detect names/orgs/locations alongside keywords',
+	    'nlp.hint': 'When enabled, it detects selected entities and replaces them with placeholders. Heuristic is conservative; ONNX requires extra runtime and model files. If model path is empty, it will try ~/.vibeguard/models/ner first.',
+	    'nlp.optionalNote': 'Note: NLP is English-first by default; Chinese/multilingual requires configuring ONNX model paths.',
+	    'nlp.advanced': 'Advanced settings',
+    'nlp.engine': 'Engine',
+    'nlp.engine.heuristic': 'Heuristic (built-in)',
+    'nlp.engine.onnx': 'ONNX (extra required)',
+    'nlp.engine.onnxUnavailable': 'ONNX not available in this build',
+    'nlp.modelPath': 'Model path',
+    'nlp.routeByLang': 'Route by language',
+    'nlp.routeByLangHint': 'Use separate EN/ZH model paths; lazy load to save memory.',
+    'nlp.modelPathEn': 'English model path',
+    'nlp.modelPathZh': 'Chinese model path',
+    'nlp.maxLoadedModels': 'Max loaded models',
+    'nlp.maxLoadedModelsHint': '1 saves memory; 2 switches faster.',
+    'nlp.minScore': 'Min score',
+    'nlp.entities': 'Entities',
+    'nlp.atLeastOne': 'Select at least one entity',
+    'nlp.entity.person': 'Person',
+    'nlp.entity.org': 'Organization',
+    'nlp.entity.location': 'Location',
+    'nlp.on': 'Enabled',
+    'nlp.off': 'Disabled',
+    'nlp.updated': 'NLP settings updated',
+    'nlp.updateFailed': 'Failed to update NLP',
     'patterns.regex': 'Keywords',
     'patterns.add': '+ Add',
     'patterns.noRegex': 'No keywords configured',
@@ -535,6 +672,25 @@ const i18n = {
     'logs.empty': 'No logs yet (try setting log.level=debug and restart vibeguard)',
     'logs.connecting': 'Connecting...',
     'logs.reconnecting': 'Disconnected, reconnecting...',
+    'debug.title': 'Packet Capture',
+    'debug.subtitle': 'Capture and inspect full request/response (to see what was modified). Stored in memory only.',
+    'debug.enable': 'Enable capture',
+    'debug.maxBodyBytes': 'Body limit',
+    'debug.maskHeaders': 'Mask sensitive headers',
+    'debug.refresh': 'Refresh',
+    'debug.clear': 'Clear',
+    'debug.empty': 'No capture data yet (enable capture, then make a request).',
+    'debug.view': 'View',
+    'debug.detail.title': 'Capture Detail',
+    'debug.detail.request': 'Request',
+    'debug.detail.response': 'Response',
+    'debug.detail.headersOriginal': 'Original headers',
+    'debug.detail.headersForwarded': 'Forwarded headers',
+    'debug.detail.bodyOriginal': 'Original body',
+    'debug.detail.bodyForwarded': 'Forwarded body',
+    'debug.detail.truncated': 'Truncated',
+    'debug.detail.copy': 'Copy',
+    'debug.detail.close': 'Close',
     'audit.title': 'Audit',
     'audit.subtitle': 'Per-request redaction hits and matched content (preview by default)',
     'audit.clear': 'Clear',
@@ -660,7 +816,7 @@ async function initLang() {
   applyLang(saved || 'zh');
 }
 
-const state = { stats: { proxy: {}, session: {}, requests: {} }, patterns: { keywords: [], regex: [], builtin: [], exclude: [] }, presidio: { enabled: false, recognizers: [] }, sessions: { total: 0, mappings: [] }, certs: { ca: {} }, audit: { redact_log: true, max_events: 200, events: [] }, logs: { configured_path: '', effective_path: '', exists: false, lines: [], warning: '' } };
+const state = { stats: { proxy: {}, session: {}, requests: {} }, patterns: { keywords: [], regex: [], builtin: [], exclude: [] }, rule_lists: [], ui: { patterns_tab: 'rule_lists' }, nlp: { enabled: false, engine: 'heuristic', model_path: '', entities: [], min_score: 0, onnx_available: false }, sessions: { total: 0, mappings: [] }, certs: { ca: {} }, audit: { redact_log: true, max_events: 200, events: [] }, logs: { configured_path: '', effective_path: '', exists: false, lines: [], warning: '' }, debug: { status: { enabled: false, max_body_bytes: 1048576, max_events: 50, mask_headers: true, count: 0 }, events: [] } };
 state.auth = { configured: false, authenticated: false, broken: false, broken_error: '' };
 let auditES = null;
 let logsES = null;
@@ -787,25 +943,33 @@ function normalizePatterns(p) {
   return { keywords, regex, builtin, exclude };
 }
 
-function route() {
-  if (!state.auth || !state.auth.authenticated) {
-    // 首次进入先走鉴权逻辑（setup/login），避免在未登录时触发大量 API 请求。
-    ensureAuthedOrShowAuth();
-    return;
-  }
-  const h = window.location.hash || '#/', p = h.slice(2) || 'dashboard';
-  document.querySelectorAll('.nav-item').forEach(e => { e.classList.remove('active'); if (e.dataset.page === p || (p === '' && e.dataset.page === 'dashboard')) e.classList.add('active'); });
-  const c = document.getElementById('main-content'); c.classList.add('fade-in');
-  if (p !== 'audit') stopAuditStream();
-  if (p !== 'logs') stopLogsStream();
-  if (p === '' || p === 'dashboard') renderDashboard();
-  else if (p === 'audit') renderAudit();
-  else if (p === 'patterns') renderPatterns();
-  else if (p === 'sessions') renderSessions();
-  else if (p === 'certs') renderCerts();
-  else if (p === 'logs') renderLogs();
-  else c.innerHTML = '<div class="text-center py-20 text-muted">Page not found</div>';
-}
+	function route() {
+	  if (!state.auth || !state.auth.authenticated) {
+	    // 首次进入先走鉴权逻辑（setup/login），避免在未登录时触发大量 API 请求。
+	    ensureAuthedOrShowAuth();
+	    return;
+	  }
+	  const h = window.location.hash || '#/', p = h.slice(2) || 'dashboard';
+	  // 旧路由兼容：原 #/patterns 页面已拆分为三个独立板块（规则列表/关键词/NLP）。
+	  if (p === 'patterns') {
+	    window.location.hash = '#/rule_lists';
+	    return;
+	  }
+	  document.querySelectorAll('.nav-item').forEach(e => { e.classList.remove('active'); if (e.dataset.page === p || (p === '' && e.dataset.page === 'dashboard')) e.classList.add('active'); });
+	  const c = document.getElementById('main-content'); c.classList.add('fade-in');
+	  if (p !== 'audit') stopAuditStream();
+	  if (p !== 'logs') stopLogsStream();
+	  if (p === '' || p === 'dashboard') renderDashboard();
+	  else if (p === 'audit') renderAudit();
+	  else if (p === 'rule_lists') renderRuleListsPage();
+	  else if (p === 'keywords') renderKeywordsPage();
+	  else if (p === 'nlp') renderNLPPage();
+	  else if (p === 'sessions') renderSessions();
+	  else if (p === 'certs') renderCerts();
+	  else if (p === 'logs') renderLogs();
+	  else if (p === 'debug') renderDebug();
+	  else c.innerHTML = '<div class="text-center py-20 text-muted">Page not found</div>';
+	}
 
 function renderAuthSetup() {
   const c = document.getElementById('main-content');
@@ -1479,39 +1643,552 @@ async function renderLogs() {
 
   state.logs.lines = [];
   renderLogsMeta();
-  renderLogsList();
-  startLogsStream();
+	renderLogsList();
+	startLogsStream();
+	}
+
+	async function renderRuleListsPage() {
+	  document.getElementById('main-content').innerHTML =
+	    '<div class="mb-8"><h2 class="text-2xl font-bold text-text">' + t('ruleLists.title') + '</h2><p class="text-muted mt-1">' + t('ruleLists.subtitle') + '</p></div>' +
+	    '<div class="card p-6">' +
+	      '<div class="flex justify-between items-center mb-4">' +
+	        '<div class="flex flex-wrap gap-2 justify-end w-full">' +
+	          '<button class="btn btn-primary text-sm" onclick="showUploadRuleList()">' + t('ruleLists.upload') + '</button>' +
+	          '<button class="btn btn-secondary text-sm" onclick="showSubscribeRuleList()">' + t('ruleLists.subscribe') + '</button>' +
+	        '</div>' +
+	      '</div>' +
+	      '<div id="rule-lists-list" class="space-y-2"><div class="text-muted text-sm py-4 text-center">' + t('patterns.loading') + '</div></div>' +
+	    '</div>';
+	  await loadRuleLists();
+	}
+
+	async function renderKeywordsPage() {
+	  document.getElementById('main-content').innerHTML =
+	    '<div class="mb-8"><h2 class="text-2xl font-bold text-text">' + t('keywords.title') + '</h2><p class="text-muted mt-1">' + t('keywords.subtitle') + '</p></div>' +
+	    '<div class="card p-6">' +
+	      '<div class="flex justify-between items-center mb-4">' +
+	        '<h3 class="font-semibold text-text">' + t('keywords.title') + '</h3>' +
+	        '<button class="btn btn-primary text-sm" onclick="showAddKeyword()">' + t('patterns.add') + '</button>' +
+	      '</div>' +
+	      '<div id="keywords-list" class="space-y-2"><div class="text-muted text-sm py-4 text-center">' + t('patterns.loading') + '</div></div>' +
+	    '</div>';
+	  await loadPatterns();
+	}
+
+	async function renderNLPPage() {
+	  document.getElementById('main-content').innerHTML =
+	    '<div class="mb-8"><h2 class="text-2xl font-bold text-text">' + t('nlp.title') + '</h2><p class="text-muted mt-1">' + t('nlp.subtitle') + '</p></div>' +
+	    '<div class="card p-6">' +
+	      '<div class="flex justify-between items-start gap-6">' +
+	        '<div>' +
+	          '<h3 class="font-semibold text-text">' + t('nlp.title') + '</h3>' +
+	          '<div class="text-xs text-muted mt-1">' + t('nlp.subtitle') + '</div>' +
+	        '</div>' +
+	        '<div class="flex items-center gap-3">' +
+	          '<div id="nlp-status" class="tag tag-yellow inline-flex"></div>' +
+	          '<label class="pill-switch" title="' + esc(t('nlp.hint')) + '">' +
+	            '<input type="checkbox" id="nlp-toggle" onchange="toggleNLP(this.checked)">' +
+	            '<span class="pill-slider"></span>' +
+	          '</label>' +
+	        '</div>' +
+	      '</div>' +
+	      '<div class="text-xs text-muted mt-3">' + t('nlp.optionalNote') + '</div>' +
+	      '<details class="mt-4">' +
+	        '<summary class="text-sm font-medium text-text cursor-pointer select-none">' + t('nlp.advanced') + '</summary>' +
+	        '<div class="mt-4">' +
+	          '<div class="text-xs text-muted">' + t('nlp.hint') + '</div>' +
+	          '<div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">' +
+	            '<div>' +
+	              '<div class="text-sm font-medium text-text mb-2">' + t('nlp.engine') + '</div>' +
+	              '<select id="nlp-engine" class="w-full" onchange="updateNLPEngine(this.value)"></select>' +
+	              '<div id="nlp-onnx-hint" class="text-xs text-muted mt-2"></div>' +
+	            '</div>' +
+	            '<div id="nlp-onnx-fields" style="display:none">' +
+	              '<div class="text-sm font-medium text-text mb-2">' + t('nlp.modelPath') + '</div>' +
+	              '<input type="text" id="nlp-model-path" class="w-full font-mono" placeholder="~/.vibeguard/models/ner" onblur="updateNLPModelPath()">' +
+	              '<div class="text-sm font-medium text-text mb-2 mt-3">' + t('nlp.minScore') + '</div>' +
+	              '<input type="number" id="nlp-min-score" min="0" max="1" step="0.05" class="w-full font-mono" onblur="updateNLPMinScore()">' +
+	              '<div class="mt-4 p-3 bg-surface rounded-lg border border-border">' +
+	                '<div class="flex items-center justify-between gap-4">' +
+	                  '<div>' +
+	                    '<div class="text-sm font-medium text-text">' + t('nlp.routeByLang') + '</div>' +
+	                    '<div class="text-xs text-muted mt-1">' + t('nlp.routeByLangHint') + '</div>' +
+	                  '</div>' +
+	                  '<label class="pill-switch">' +
+	                    '<input type="checkbox" id="nlp-route-toggle" onchange="updateNLPRouteByLang(this.checked)">' +
+	                    '<span class="pill-slider"></span>' +
+	                  '</label>' +
+	                '</div>' +
+	                '<div id="nlp-route-fields" class="mt-3" style="display:none">' +
+	                  '<div class="text-sm font-medium text-text mb-2">' + t('nlp.modelPathEn') + '</div>' +
+	                  '<input type="text" id="nlp-model-path-en" class="w-full font-mono" placeholder="~/.vibeguard/models/ner/en" onblur="updateNLPModelPathEN()">' +
+	                  '<div class="text-sm font-medium text-text mb-2 mt-3">' + t('nlp.modelPathZh') + '</div>' +
+	                  '<input type="text" id="nlp-model-path-zh" class="w-full font-mono" placeholder="~/.vibeguard/models/ner/zh" onblur="updateNLPModelPathZH()">' +
+	                  '<div class="text-sm font-medium text-text mb-2 mt-3">' + t('nlp.maxLoadedModels') + '</div>' +
+	                  '<select id="nlp-max-loaded" class="w-full" onchange="updateNLPMaxLoadedModels(this.value)">' +
+	                    '<option value="1">1</option>' +
+	                    '<option value="2">2</option>' +
+	                  '</select>' +
+	                  '<div class="text-xs text-muted mt-2">' + t('nlp.maxLoadedModelsHint') + '</div>' +
+	                '</div>' +
+	              '</div>' +
+	            '</div>' +
+	          '</div>' +
+	          '<div class="mt-4">' +
+	            '<div class="text-sm font-medium text-text mb-2">' + t('nlp.entities') + '</div>' +
+	            '<div id="nlp-entities" class="grid grid-cols-1 md:grid-cols-2 gap-2"></div>' +
+	          '</div>' +
+	        '</div>' +
+	      '</details>' +
+	    '</div>';
+	  await loadNLP();
+	}
+
+	async function renderPatterns() {
+	  document.getElementById('main-content').innerHTML =
+	    '<div class="mb-8"><h2 class="text-2xl font-bold text-text">' + t('patterns.title') + '</h2><p class="text-muted mt-1">' + t('patterns.subtitle') + '</p></div>' +
+	    '<div class="card p-4 mb-6 flex flex-wrap gap-2 items-center">' +
+	      '<button id="patterns-tab-rulelists" class="btn btn-secondary text-sm" onclick="setPatternsTab(\'rule_lists\')">' + t('patterns.tabs.ruleLists') + '</button>' +
+      '<button id="patterns-tab-keywords" class="btn btn-secondary text-sm" onclick="setPatternsTab(\'keywords\')">' + t('patterns.tabs.keywords') + '</button>' +
+    '</div>' +
+    '<div id="patterns-tab-body"></div>' +
+    '<details class="card p-6 mt-6">' +
+      '<summary class="cursor-pointer select-none">' +
+        '<div>' +
+          '<div class="font-semibold text-text">' + t('patterns.optional.title') + '</div>' +
+          '<div class="text-xs text-muted mt-1">' + t('patterns.optional.subtitle') + '</div>' +
+        '</div>' +
+      '</summary>' +
+      '<div class="mt-6 space-y-6">' +
+        '<div class="card p-6">' +
+          '<div class="flex justify-between items-start gap-6">' +
+            '<div>' +
+              '<h3 class="font-semibold text-text">' + t('nlp.title') + '</h3>' +
+              '<div class="text-xs text-muted mt-1">' + t('nlp.subtitle') + '</div>' +
+            '</div>' +
+            '<div class="flex items-center gap-3">' +
+              '<div id="nlp-status" class="tag tag-yellow inline-flex"></div>' +
+              '<label class="pill-switch" title="' + esc(t('nlp.hint')) + '">' +
+                '<input type="checkbox" id="nlp-toggle" onchange="toggleNLP(this.checked)">' +
+                '<span class="pill-slider"></span>' +
+              '</label>' +
+            '</div>' +
+          '</div>' +
+          '<div class="text-xs text-muted mt-3">' + t('nlp.optionalNote') + '</div>' +
+          '<details class="mt-4">' +
+            '<summary class="text-sm font-medium text-text cursor-pointer select-none">' + t('nlp.advanced') + '</summary>' +
+            '<div class="mt-4">' +
+              '<div class="text-xs text-muted">' + t('nlp.hint') + '</div>' +
+              '<div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">' +
+                '<div>' +
+                  '<div class="text-sm font-medium text-text mb-2">' + t('nlp.engine') + '</div>' +
+                  '<select id="nlp-engine" class="w-full" onchange="updateNLPEngine(this.value)"></select>' +
+                  '<div id="nlp-onnx-hint" class="text-xs text-muted mt-2"></div>' +
+                '</div>' +
+                '<div id="nlp-onnx-fields" style="display:none">' +
+                  '<div class="text-sm font-medium text-text mb-2">' + t('nlp.modelPath') + '</div>' +
+                  '<input type="text" id="nlp-model-path" class="w-full font-mono" placeholder="~/.vibeguard/models/ner" onblur="updateNLPModelPath()">' +
+                  '<div class="text-sm font-medium text-text mb-2 mt-3">' + t('nlp.minScore') + '</div>' +
+                  '<input type="number" id="nlp-min-score" min="0" max="1" step="0.05" class="w-full font-mono" onblur="updateNLPMinScore()">' +
+                  '<div class="mt-4 p-3 bg-surface rounded-lg border border-border">' +
+                    '<div class="flex items-center justify-between gap-4">' +
+                      '<div>' +
+                        '<div class="text-sm font-medium text-text">' + t('nlp.routeByLang') + '</div>' +
+                        '<div class="text-xs text-muted mt-1">' + t('nlp.routeByLangHint') + '</div>' +
+                      '</div>' +
+                      '<label class="pill-switch">' +
+                        '<input type="checkbox" id="nlp-route-toggle" onchange="updateNLPRouteByLang(this.checked)">' +
+                        '<span class="pill-slider"></span>' +
+                      '</label>' +
+                    '</div>' +
+                    '<div id="nlp-route-fields" class="mt-3" style="display:none">' +
+                      '<div class="text-sm font-medium text-text mb-2">' + t('nlp.modelPathEn') + '</div>' +
+                      '<input type="text" id="nlp-model-path-en" class="w-full font-mono" placeholder="~/.vibeguard/models/ner/en" onblur="updateNLPModelPathEN()">' +
+                      '<div class="text-sm font-medium text-text mb-2 mt-3">' + t('nlp.modelPathZh') + '</div>' +
+                      '<input type="text" id="nlp-model-path-zh" class="w-full font-mono" placeholder="~/.vibeguard/models/ner/zh" onblur="updateNLPModelPathZH()">' +
+                      '<div class="text-sm font-medium text-text mb-2 mt-3">' + t('nlp.maxLoadedModels') + '</div>' +
+                      '<select id="nlp-max-loaded" class="w-full" onchange="updateNLPMaxLoadedModels(this.value)">' +
+                        '<option value="1">1</option>' +
+                        '<option value="2">2</option>' +
+                      '</select>' +
+                      '<div class="text-xs text-muted mt-2">' + t('nlp.maxLoadedModelsHint') + '</div>' +
+                    '</div>' +
+                  '</div>' +
+                '</div>' +
+              '</div>' +
+              '<div class="mt-4">' +
+                '<div class="text-sm font-medium text-text mb-2">' + t('nlp.entities') + '</div>' +
+                '<div id="nlp-entities" class="grid grid-cols-1 md:grid-cols-2 gap-2"></div>' +
+              '</div>' +
+            '</div>' +
+          '</details>' +
+        '</div>' +
+      '</div>' +
+    '</details>';
+  await renderPatternsTab();
+  await loadNLP();
 }
 
-async function renderPatterns() {
-  document.getElementById('main-content').innerHTML =
-    '<div class="mb-8"><h2 class="text-2xl font-bold text-text">' + t('patterns.title') + '</h2><p class="text-muted mt-1">' + t('patterns.subtitle') + '</p></div>' +
-    '<div class="card p-6 mb-6">' +
-      '<div class="flex justify-between items-start gap-6">' +
-        '<div>' +
-          '<h3 class="font-semibold text-text">' + t('presidio.title') + '</h3>' +
-          '<div class="text-xs text-muted mt-1">' + t('presidio.subtitle') + '</div>' +
+function getPatternsTab() {
+  let v = '';
+  try { v = String(localStorage.getItem('vg_patterns_tab') || '').trim(); } catch (e) { /* ignore */ }
+  if (v === 'keywords' || v === 'rule_lists') return v;
+  const cur = String(state.ui?.patterns_tab || '').trim();
+  if (cur === 'keywords' || cur === 'rule_lists') return cur;
+  return 'rule_lists';
+}
+
+function setPatternsTab(tab) {
+  const v = String(tab || '').trim();
+  if (v !== 'keywords' && v !== 'rule_lists') return;
+  if (!state.ui) state.ui = {};
+  state.ui.patterns_tab = v;
+  try { localStorage.setItem('vg_patterns_tab', v); } catch (e) { /* ignore */ }
+  renderPatternsTab();
+}
+
+async function renderPatternsTab() {
+  const tab = getPatternsTab();
+  if (!state.ui) state.ui = {};
+  state.ui.patterns_tab = tab;
+
+  const b1 = document.getElementById('patterns-tab-rulelists');
+  const b2 = document.getElementById('patterns-tab-keywords');
+  if (b1) b1.className = 'btn ' + (tab === 'rule_lists' ? 'btn-primary' : 'btn-secondary') + ' text-sm';
+  if (b2) b2.className = 'btn ' + (tab === 'keywords' ? 'btn-primary' : 'btn-secondary') + ' text-sm';
+
+  const body = document.getElementById('patterns-tab-body');
+  if (!body) return;
+
+  if (tab === 'keywords') {
+    body.innerHTML =
+      '<div class="card p-6">' +
+        '<div class="flex justify-between items-center mb-4"><h3 class="font-semibold text-text">' + t('patterns.regex') + '</h3><button class="btn btn-primary text-sm" onclick="showAddKeyword()">' + t('patterns.add') + '</button></div>' +
+        '<div id="keywords-list" class="space-y-2"><div class="text-muted text-sm py-4 text-center">' + t('patterns.loading') + '</div></div>' +
+      '</div>';
+    await loadPatterns();
+    return;
+  }
+
+	  body.innerHTML =
+	    '<div class="card p-6">' +
+	      '<div class="flex justify-between items-center mb-4">' +
+	        '<div>' +
+	          '<h3 class="font-semibold text-text">' + t('ruleLists.title') + '</h3>' +
+	          '<div class="text-xs text-muted mt-1">' + t('ruleLists.subtitle') + '</div>' +
+	        '</div>' +
+	        '<div class="flex flex-wrap gap-2 justify-end">' +
+	          '<button class="btn btn-primary text-sm" onclick="showUploadRuleList()">' + t('ruleLists.upload') + '</button>' +
+	          '<button class="btn btn-secondary text-sm" onclick="showSubscribeRuleList()">' + t('ruleLists.subscribe') + '</button>' +
+	        '</div>' +
+	      '</div>' +
+	      '<div id="rule-lists-list" class="space-y-2"><div class="text-muted text-sm py-4 text-center">' + t('patterns.loading') + '</div></div>' +
+	    '</div>';
+  await loadRuleLists();
+}
+
+function normalizeRuleLists(raw) {
+  const r = raw || {};
+  const arr = r.rule_lists ?? r.RuleLists ?? r.ruleLists ?? [];
+  if (!Array.isArray(arr)) return [];
+  return arr.map(it => ({
+    id: String(it?.id ?? it?.ID ?? ''),
+    name: String(it?.name ?? it?.Name ?? ''),
+    path: String(it?.path ?? it?.Path ?? ''),
+    url: String(it?.url ?? it?.URL ?? ''),
+    kind: String(it?.kind ?? it?.Kind ?? ''),
+    enabled: !!(it?.enabled ?? it?.Enabled),
+    priority: Number(it?.priority ?? it?.Priority ?? 50),
+    exists: !!(it?.exists ?? it?.Exists),
+    verified: !!(it?.verified ?? it?.Verified),
+    last_error: String(it?.last_error ?? it?.LastError ?? ''),
+    checked_at: Number(it?.checked_at ?? it?.CheckedAt ?? 0),
+    updated_at: Number(it?.updated_at ?? it?.UpdatedAt ?? 0)
+  })).filter(it => (it.id || it.path || it.url));
+}
+
+async function loadRuleLists() {
+  try {
+    state.rule_lists = normalizeRuleLists(await api.get('/rule_lists'));
+    renderRuleListsList();
+  } catch (e) { console.error(e); }
+}
+
+function renderRuleListsList() {
+  const box = document.getElementById('rule-lists-list');
+  if (!box) return;
+  const list = Array.isArray(state.rule_lists) ? state.rule_lists : [];
+  if (list.length === 0) {
+    box.innerHTML = '<div class="text-muted text-sm py-4 text-center">' + t('ruleLists.noRuleLists') + '</div>';
+    return;
+  }
+
+  box.innerHTML = list.map((rl, i) => {
+    const kind = String(rl.kind || (rl.url ? 'subscription' : 'local') || '').toLowerCase();
+    const on = !!rl.enabled;
+    const statusText = on ? t('ruleLists.enabled') : t('ruleLists.disabled');
+    const statusClass = on ? 'tag-green' : 'tag-yellow';
+    const missing = rl.exists ? '' : '<span class="tag tag-red">' + t('ruleLists.missing') + '</span>';
+    const kindTag = '<span class="tag tag-blue">' + esc(kind === 'subscription' ? t('ruleLists.kind.subscription') : t('ruleLists.kind.local')) + '</span>';
+    let verifyTag = '';
+    if (kind === 'subscription') {
+      if (String(rl.last_error || '').trim() !== '') verifyTag = '<span class="tag tag-red">' + t('ruleLists.verifyFailed') + '</span>';
+      else if (!!rl.verified) verifyTag = '<span class="tag tag-green">' + t('ruleLists.verifyOk') + '</span>';
+      else verifyTag = '<span class="tag tag-yellow">' + t('ruleLists.verifyPending') + '</span>';
+    }
+    const canDelete = String(rl.id || '').trim() !== '';
+    const delBtn = canDelete
+      ? '<button class="delete-btn text-muted hover:text-danger" onclick="deleteRuleList(' + i + ')"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>'
+      : '<button class="delete-btn text-muted opacity-40 cursor-not-allowed" title="' + esc(t('ruleLists.deleteUnavailable')) + '" disabled><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>';
+
+    const src = String(rl.url || rl.path || '');
+    const srcHtml = src ? ('<div class="text-xs text-muted mt-3 font-mono break-all">' + esc(src) + '</div>') : '';
+    const errMsg = String(rl.last_error || '').trim();
+    const errHtml = errMsg ? ('<div class="text-xs text-danger mt-2 break-words">' + esc(errMsg) + '</div>') : '';
+
+    return '' +
+      '<div class="pattern-item flex flex-col md:flex-row md:items-start md:justify-between gap-4 p-3 bg-surface rounded-lg">' +
+        '<div class="flex-1 min-w-0">' +
+          '<div class="flex flex-wrap items-center gap-2">' +
+            '<span class="tag ' + statusClass + '">' + esc(statusText) + '</span>' +
+            kindTag +
+            missing +
+            verifyTag +
+          '</div>' +
+          '<div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">' +
+            '<div>' +
+              '<div class="text-xs text-muted mb-1">' + t('ruleLists.name') + '</div>' +
+              '<input type="text" id="rulelist-name-' + i + '" class="w-full" placeholder="' + esc(t('ruleLists.namePlaceholder')) + '" onblur="updateRuleListName(' + i + ')">' +
+            '</div>' +
+            '<div>' +
+              '<div class="text-xs text-muted mb-1">' + t('ruleLists.priority') + '</div>' +
+              '<input type="number" id="rulelist-priority-' + i + '" min="1" max="99" step="1" class="w-full font-mono" onblur="updateRuleListPriority(' + i + ')">' +
+              '<div class="text-xs text-muted mt-2">' + t('ruleLists.priorityHint') + '</div>' +
+            '</div>' +
+          '</div>' +
+          srcHtml +
+          errHtml +
         '</div>' +
-        '<div class="flex items-center gap-3">' +
-          '<div id="presidio-status" class="tag tag-yellow inline-flex"></div>' +
-          '<label class="pill-switch" title="' + esc(t('presidio.hint')) + '">' +
-            '<input type="checkbox" id="presidio-toggle" onchange="togglePresidio(this.checked)">' +
+        '<div class="flex items-center gap-2 justify-end">' +
+          '<label class="pill-switch">' +
+            '<input type="checkbox" id="rulelist-enabled-' + i + '" onchange="updateRuleListEnabled(' + i + ', this.checked)">' +
             '<span class="pill-slider"></span>' +
           '</label>' +
+          delBtn +
         '</div>' +
-      '</div>' +
-      '<div class="text-xs text-muted mt-3">' + t('presidio.hint') + '</div>' +
-      '<div class="mt-4">' +
-        '<div class="text-sm font-medium text-text mb-2">' + t('presidio.recognizers') + '</div>' +
-        '<div id="presidio-recognizers" class="grid grid-cols-1 md:grid-cols-2 gap-2"></div>' +
-      '</div>' +
-    '</div>' +
-    '<div class="card p-6">' +
-      '<div class="flex justify-between items-center mb-4"><h3 class="font-semibold text-text">' + t('patterns.regex') + '</h3><button class="btn btn-primary text-sm" onclick="showAddKeyword()">' + t('patterns.add') + '</button></div>' +
-      '<div id="keywords-list" class="space-y-2"><div class="text-muted text-sm py-4 text-center">' + t('patterns.loading') + '</div></div>' +
-    '</div>';
-  await loadPresidio();
-  await loadPatterns();
+      '</div>';
+  }).join('');
+
+  // 填充输入值（避免属性转义复杂度）
+  list.forEach((rl, i) => {
+    const nameEl = document.getElementById('rulelist-name-' + i);
+    if (nameEl) nameEl.value = String(rl.name || '');
+    const priEl = document.getElementById('rulelist-priority-' + i);
+    if (priEl) priEl.value = String((Number.isFinite(rl.priority) ? rl.priority : 50) || 50);
+    const enEl = document.getElementById('rulelist-enabled-' + i);
+    if (enEl) enEl.checked = !!rl.enabled;
+  });
+}
+
+let ruleListsBusy = false;
+async function updateRuleListEnabled(idx, on) {
+  if (ruleListsBusy) return;
+  const list = Array.isArray(state.rule_lists) ? state.rule_lists : [];
+  const rl = list[idx];
+  if (!rl) return;
+  const key = String(rl.id || rl.path || rl.url || '').trim();
+  if (!key) return;
+  ruleListsBusy = true;
+  try {
+    const resp = await api.post('/rule_lists', { id: key, enabled: !!on });
+    state.rule_lists = normalizeRuleLists(resp);
+    renderRuleListsList();
+    toast(t('ruleLists.updated'));
+  } catch (e) {
+    toast(t('ruleLists.updateFailed') + ': ' + e.message, 'error');
+  } finally {
+    ruleListsBusy = false;
+  }
+}
+
+async function updateRuleListName(idx) {
+  if (ruleListsBusy) return;
+  const list = Array.isArray(state.rule_lists) ? state.rule_lists : [];
+  const rl = list[idx];
+  if (!rl) return;
+  const key = String(rl.id || rl.path || rl.url || '').trim();
+  if (!key) return;
+
+  const el = document.getElementById('rulelist-name-' + idx);
+  const next = sanitizeInputText(el?.value || '');
+  const prev = String(rl.name || '');
+  if (next === prev) return;
+
+  ruleListsBusy = true;
+  try {
+    const resp = await api.post('/rule_lists', { id: key, name: next });
+    state.rule_lists = normalizeRuleLists(resp);
+    renderRuleListsList();
+    toast(t('ruleLists.updated'));
+  } catch (e) {
+    toast(t('ruleLists.updateFailed') + ': ' + e.message, 'error');
+  } finally {
+    ruleListsBusy = false;
+  }
+}
+
+async function updateRuleListPriority(idx) {
+  if (ruleListsBusy) return;
+  const list = Array.isArray(state.rule_lists) ? state.rule_lists : [];
+  const rl = list[idx];
+  if (!rl) return;
+  const key = String(rl.id || rl.path || rl.url || '').trim();
+  if (!key) return;
+
+  const el = document.getElementById('rulelist-priority-' + idx);
+  const raw = sanitizeInputText(el?.value || '');
+  let p = parseInt(raw, 10);
+  if (!Number.isFinite(p)) p = Number(rl.priority || 50);
+  if (!Number.isFinite(p)) p = 50;
+  if (p < 1) p = 1;
+  if (p > 99) p = 99;
+  const prev = Number(rl.priority || 50);
+  if (p === prev) return;
+
+  ruleListsBusy = true;
+  try {
+    const resp = await api.post('/rule_lists', { id: key, priority: p });
+    state.rule_lists = normalizeRuleLists(resp);
+    renderRuleListsList();
+    toast(t('ruleLists.updated'));
+  } catch (e) {
+    toast(t('ruleLists.updateFailed') + ': ' + e.message, 'error');
+  } finally {
+    ruleListsBusy = false;
+  }
+}
+
+async function deleteRuleList(idx) {
+  const list = Array.isArray(state.rule_lists) ? state.rule_lists : [];
+  const rl = list[idx];
+  if (!rl) return;
+  const id = String(rl.id || '').trim();
+  if (!id) {
+    toast(t('ruleLists.deleteUnavailable'), 'error');
+    return;
+  }
+  if (!confirm(t('ruleLists.deleteConfirm'))) return;
+  try {
+    await api.del('/rule_lists/' + encodeURIComponent(id));
+    toast(t('ruleLists.deleted'));
+    await loadRuleLists();
+  } catch (e) {
+    toast(t('ruleLists.deleteFailed') + ': ' + e.message, 'error');
+  }
+}
+
+function showUploadRuleList() {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay'; overlay.id = 'modal-overlay';
+  overlay.onclick = function(e) { if (e.target === overlay) closeModal(); };
+  overlay.innerHTML = '<div class="modal-content"><h3 class="text-lg font-bold text-text mb-6">' + esc(t('ruleLists.upload')) + '</h3>' +
+    '<div class="mb-4"><label class="block text-sm font-medium text-text mb-2">' + t('ruleLists.name') + '</label>' +
+      '<input type="text" id="rulelist-upload-name" class="w-full" placeholder="' + esc(t('ruleLists.namePlaceholder')) + '"></div>' +
+    '<div class="mb-4"><label class="block text-sm font-medium text-text mb-2">' + t('ruleLists.priority') + '</label>' +
+      '<input type="number" id="rulelist-upload-priority" min="1" max="99" step="1" class="w-full font-mono" value="50">' +
+      '<div class="text-xs text-muted mt-2">' + t('ruleLists.priorityHint') + '</div></div>' +
+    '<div class="mb-4"><label class="block text-sm font-medium text-text mb-2">' + t('ruleLists.file') + ' <span class="text-danger">*</span></label>' +
+      '<input type="file" id="rulelist-upload-file" class="w-full" accept=".vgrules,.txt">' +
+      '<div class="text-xs text-muted mt-2">' + t('ruleLists.fileHint') + '</div></div>' +
+    '<div class="flex justify-end gap-3 mt-6"><button class="btn btn-secondary" onclick="closeModal()">' + t('patterns.cancel') + '</button>' +
+    '<button class="btn btn-primary" onclick="confirmUploadRuleList()">' + esc(t('ruleLists.upload')) + '</button></div></div>';
+  document.body.appendChild(overlay);
+  setTimeout(function() { var el = document.getElementById('rulelist-upload-file'); if (el) el.focus(); }, 100);
+}
+
+function confirmUploadRuleList() {
+  const file = document.getElementById('rulelist-upload-file')?.files?.[0];
+  if (!file) { toast(t('ruleLists.fileRequired'), 'error'); return; }
+  const name = sanitizeInputText(document.getElementById('rulelist-upload-name')?.value || '');
+  const raw = sanitizeInputText(document.getElementById('rulelist-upload-priority')?.value || '');
+  let p = parseInt(raw, 10);
+  if (!Number.isFinite(p)) p = 50;
+  if (p < 1) p = 1;
+  if (p > 99) p = 99;
+  closeModal();
+  uploadRuleList(file, name, p);
+}
+
+async function uploadRuleList(file, name, priority) {
+  const fd = new FormData();
+  fd.append('file', file);
+  if (name) fd.append('name', name);
+  fd.append('priority', String(priority || 50));
+
+  try {
+    const r = await fetch('/manager/api/rule_lists/upload', { method: 'POST', body: fd, credentials: 'same-origin' });
+    if (r.status === 401 || r.status === 403) { await refreshAuthStatus(); await ensureAuthedOrShowAuth(); }
+    if (!r.ok) await throwHttpError(r);
+    toast(t('ruleLists.uploaded'));
+    await loadRuleLists();
+  } catch (e) {
+    toast(t('ruleLists.uploadFailed') + ': ' + e.message, 'error');
+  }
+}
+
+function showSubscribeRuleList() {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay'; overlay.id = 'modal-overlay';
+  overlay.onclick = function(e) { if (e.target === overlay) closeModal(); };
+  overlay.innerHTML = '<div class="modal-content"><h3 class="text-lg font-bold text-text mb-6">' + esc(t('ruleLists.subscribeTitle')) + '</h3>' +
+    '<div class="mb-4"><label class="block text-sm font-medium text-text mb-2">' + t('ruleLists.url') + ' <span class="text-danger">*</span></label>' +
+      '<input type="text" id="rulelist-sub-url" class="w-full font-mono" placeholder="' + esc(t('ruleLists.urlPlaceholder')) + '"></div>' +
+    '<div class="mb-4"><label class="block text-sm font-medium text-text mb-2">' + t('ruleLists.sigUrl') + '</label>' +
+      '<input type="text" id="rulelist-sub-sigurl" class="w-full font-mono" placeholder="' + esc(t('ruleLists.sigUrlPlaceholder')) + '"></div>' +
+    '<div class="mb-4"><label class="block text-sm font-medium text-text mb-2">' + t('ruleLists.pubKey') + '</label>' +
+      '<input type="text" id="rulelist-sub-pubkey" class="w-full font-mono" placeholder="' + esc(t('ruleLists.pubKeyPlaceholder')) + '"></div>' +
+    '<div class="mb-4"><label class="block text-sm font-medium text-text mb-2">' + t('ruleLists.sha256') + '</label>' +
+      '<input type="text" id="rulelist-sub-sha256" class="w-full font-mono" placeholder="' + esc(t('ruleLists.sha256Placeholder')) + '"></div>' +
+    '<div class="mb-4"><label class="block text-sm font-medium text-text mb-2">' + t('ruleLists.updateInterval') + '</label>' +
+      '<input type="text" id="rulelist-sub-interval" class="w-full font-mono" value="24h" placeholder="' + esc(t('ruleLists.updateIntervalPlaceholder')) + '"></div>' +
+    '<div class="mb-4"><label class="text-sm text-muted flex items-center gap-2"><input type="checkbox" id="rulelist-sub-allowhttp">' + t('ruleLists.allowHTTP') + '</label></div>' +
+    '<div class="mb-4"><label class="block text-sm font-medium text-text mb-2">' + t('ruleLists.name') + '</label>' +
+      '<input type="text" id="rulelist-sub-name" class="w-full" placeholder="' + esc(t('ruleLists.namePlaceholder')) + '"></div>' +
+    '<div class="mb-4"><label class="block text-sm font-medium text-text mb-2">' + t('ruleLists.priority') + '</label>' +
+      '<input type="number" id="rulelist-sub-priority" min="1" max="99" step="1" class="w-full font-mono" value="50"></div>' +
+    '<div class="flex justify-end gap-3 mt-6"><button class="btn btn-secondary" onclick="closeModal()">' + t('patterns.cancel') + '</button>' +
+    '<button class="btn btn-primary" onclick="confirmSubscribeRuleList()">' + esc(t('ruleLists.subscribe')) + '</button></div></div>';
+  document.body.appendChild(overlay);
+  setTimeout(function() { var el = document.getElementById('rulelist-sub-url'); if (el) el.focus(); }, 100);
+}
+
+	function confirmSubscribeRuleList() {
+	  const url = sanitizeInputText(document.getElementById('rulelist-sub-url')?.value || '');
+	  if (!url) { toast(t('ruleLists.urlRequired'), 'error'); return; }
+	  const sigURL = sanitizeInputText(document.getElementById('rulelist-sub-sigurl')?.value || '');
+	  const pubKey = sanitizeInputText(document.getElementById('rulelist-sub-pubkey')?.value || '');
+	  const sha256 = sanitizeInputText(document.getElementById('rulelist-sub-sha256')?.value || '');
+	  if (!sha256 && !(sigURL && pubKey)) { toast(t('ruleLists.verifyRequired'), 'error'); return; }
+	  const interval = sanitizeInputText(document.getElementById('rulelist-sub-interval')?.value || '');
+	  const allowHTTP = !!document.getElementById('rulelist-sub-allowhttp')?.checked;
+	  const name = sanitizeInputText(document.getElementById('rulelist-sub-name')?.value || '');
+	  const rawP = sanitizeInputText(document.getElementById('rulelist-sub-priority')?.value || '');
+	  let p = parseInt(rawP, 10);
+  if (!Number.isFinite(p)) p = 50;
+  if (p < 1) p = 1;
+  if (p > 99) p = 99;
+  closeModal();
+  subscribeRuleList({ url: url, sig_url: sigURL, pubkey: pubKey, sha256: sha256, update_interval: interval, allow_http: allowHTTP, name: name, priority: p });
+}
+
+async function subscribeRuleList(payload) {
+  try {
+    await api.post('/rule_lists/subscribe', payload);
+    toast(t('ruleLists.subscribed'));
+    await loadRuleLists();
+  } catch (e) {
+    toast(t('ruleLists.subscribeFailed') + ': ' + e.message, 'error');
+  }
 }
 async function loadPatterns() { try { state.patterns = normalizePatterns(await api.get('/patterns')); renderPatternsLists(); } catch (e) { console.error(e); } }
 function renderPatternsLists() {
@@ -1522,105 +2199,286 @@ function renderPatternsLists() {
 }
 async function deletePattern(type, idx) { if (!confirm(t('patterns.deleteConfirm'))) return; try { await api.del('/patterns/' + type + '/' + idx); toast(t('patterns.deleted')); await loadPatterns(); } catch (e) { toast(t('patterns.deleteFailed') + ': ' + e.message, 'error'); } }
 
-async function loadPresidio() { try { state.presidio = await api.get('/presidio'); renderPresidioMeta(); } catch (e) { console.error(e); } }
-function renderPresidioMeta() {
-  const el = document.getElementById('presidio-status');
-  const toggle = document.getElementById('presidio-toggle');
-  if (!el) return;
-  const on = !!(state.presidio && state.presidio.enabled);
-  el.textContent = on ? t('presidio.on') : t('presidio.off');
-  el.className = 'tag ' + (on ? 'tag-green' : 'tag-yellow') + ' inline-flex';
-  if (toggle) toggle.checked = on;
-  renderPresidioRecognizers();
-}
-let presidioBusy = false;
-async function togglePresidio(on) {
-  if (presidioBusy) return;
-  const prev = !!(state.presidio && state.presidio.enabled);
-  const next = !!on;
-  presidioBusy = true;
-  try {
-    const resp = await api.post('/presidio', { enabled: next });
-    if (!state.presidio) state.presidio = {};
-    state.presidio.enabled = !!(resp?.enabled ?? next);
-    state.presidio.recognizers = Array.isArray(resp?.recognizers) ? resp.recognizers : (state.presidio.recognizers || []);
-    renderPresidioMeta();
-    toast(t('presidio.updated'));
-  } catch (e) {
-    if (!state.presidio) state.presidio = {};
-    state.presidio.enabled = prev;
-    renderPresidioMeta();
-    toast(t('presidio.updateFailed') + ': ' + e.message, 'error');
-  } finally {
-    presidioBusy = false;
-  }
-}
-
-const PRESIDIO_RECOGNIZER_OPTIONS = [
-  { key: 'email', label: 'presidio.rec.email' },
-  { key: 'credit_card', label: 'presidio.rec.credit_card' },
-  { key: 'iban', label: 'presidio.rec.iban' },
-  { key: 'ssn', label: 'presidio.rec.ssn' },
-  { key: 'crypto', label: 'presidio.rec.crypto' },
-  { key: 'ip', label: 'presidio.rec.ip' },
-  { key: 'mac', label: 'presidio.rec.mac' },
-  { key: 'uuid', label: 'presidio.rec.uuid' },
-  { key: 'url', label: 'presidio.rec.url' },
-  { key: 'phone', label: 'presidio.rec.phone' }
+const NLP_ENTITY_OPTIONS = [
+  { key: 'PERSON', label: 'nlp.entity.person' },
+  { key: 'ORG', label: 'nlp.entity.org' },
+  { key: 'LOCATION', label: 'nlp.entity.location' }
 ];
 
-function effectivePresidioRecognizers() {
-  const list = Array.isArray(state.presidio?.recognizers) ? state.presidio.recognizers : [];
-  if (list.includes('all')) return PRESIDIO_RECOGNIZER_OPTIONS.map(o => o.key);
-  return list;
+async function loadNLP() { try { state.nlp = await api.get('/nlp'); renderNLPMeta(); } catch (e) { console.error(e); } }
+function renderNLPMeta() {
+  const el = document.getElementById('nlp-status');
+  const toggle = document.getElementById('nlp-toggle');
+  if (!el) return;
+
+  const on = !!(state.nlp && state.nlp.enabled);
+  el.textContent = on ? t('nlp.on') : t('nlp.off');
+  el.className = 'tag ' + (on ? 'tag-green' : 'tag-yellow') + ' inline-flex';
+  if (toggle) toggle.checked = on;
+
+  const onnxOk = !!state.nlp?.onnx_available;
+  let engine = String(state.nlp?.engine || 'heuristic').toLowerCase();
+  if (engine === 'onnx' && !onnxOk) engine = 'heuristic';
+
+  const sel = document.getElementById('nlp-engine');
+  if (sel) {
+    sel.innerHTML =
+      '<option value="heuristic">' + esc(t('nlp.engine.heuristic')) + '</option>' +
+      '<option value="onnx"' + (onnxOk ? '' : ' disabled') + '>' + esc(t('nlp.engine.onnx')) + '</option>';
+    sel.value = (engine === 'onnx' || engine === 'heuristic') ? engine : 'heuristic';
+  }
+
+  const hint = document.getElementById('nlp-onnx-hint');
+  if (hint) hint.textContent = onnxOk ? '' : t('nlp.engine.onnxUnavailable');
+
+  const onnxFields = document.getElementById('nlp-onnx-fields');
+  if (onnxFields) onnxFields.style.display = (engine === 'onnx') ? '' : 'none';
+
+  const mp = document.getElementById('nlp-model-path');
+  if (mp) mp.value = String(state.nlp?.model_path || '');
+  const ms = document.getElementById('nlp-min-score');
+  if (ms) ms.value = String(state.nlp?.min_score ?? 0);
+
+  const routeOn = !!state.nlp?.route_by_lang;
+  const rt = document.getElementById('nlp-route-toggle');
+  if (rt) rt.checked = routeOn;
+
+  const rf = document.getElementById('nlp-route-fields');
+  if (rf) rf.style.display = (engine === 'onnx' && routeOn) ? '' : 'none';
+
+  const mpe = document.getElementById('nlp-model-path-en');
+  if (mpe) mpe.value = String(state.nlp?.model_path_en || '');
+  const mpz = document.getElementById('nlp-model-path-zh');
+  if (mpz) mpz.value = String(state.nlp?.model_path_zh || '');
+  const ml = document.getElementById('nlp-max-loaded');
+  if (ml) ml.value = String(state.nlp?.max_loaded_models ?? 1);
+
+  renderNLPEntities();
 }
 
-function renderPresidioRecognizers() {
-  const box = document.getElementById('presidio-recognizers');
+function renderNLPEntities() {
+  const box = document.getElementById('nlp-entities');
   if (!box) return;
-  const selected = new Set(effectivePresidioRecognizers());
-  box.innerHTML = PRESIDIO_RECOGNIZER_OPTIONS.map(o =>
+  const selected = new Set(Array.isArray(state.nlp?.entities) ? state.nlp.entities : []);
+  box.innerHTML = NLP_ENTITY_OPTIONS.map(o =>
     '<label class="flex items-start gap-3 p-3 bg-surface rounded-lg cursor-pointer hover:bg-surface/70">' +
-      '<input type="checkbox" class="mt-1" id="presidio-rec-' + esc(o.key) + '" ' + (selected.has(o.key) ? 'checked' : '') + ' onchange="updatePresidioRecognizers()">' +
+      '<input type="checkbox" class="mt-1" id="nlp-ent-' + esc(o.key) + '" ' + (selected.has(o.key) ? 'checked' : '') + ' onchange="updateNLPEntities()">' +
       '<div><div class="text-sm text-text font-medium">' + t(o.label) + '</div></div>' +
     '</label>'
   ).join('');
 }
 
-async function updatePresidioRecognizers() {
-  if (presidioBusy) return;
-  const prev = effectivePresidioRecognizers();
-  const selected = PRESIDIO_RECOGNIZER_OPTIONS
-    .filter(o => document.getElementById('presidio-rec-' + o.key)?.checked)
+let nlpBusy = false;
+async function toggleNLP(on) {
+  if (nlpBusy) return;
+  const prev = !!(state.nlp && state.nlp.enabled);
+  const next = !!on;
+  nlpBusy = true;
+  try {
+    const resp = await api.post('/nlp', { enabled: next });
+    state.nlp = resp || state.nlp;
+    renderNLPMeta();
+    toast(t('nlp.updated'));
+  } catch (e) {
+    if (!state.nlp) state.nlp = {};
+    state.nlp.enabled = prev;
+    renderNLPMeta();
+    toast(t('nlp.updateFailed') + ': ' + e.message, 'error');
+  } finally {
+    nlpBusy = false;
+  }
+}
+
+async function updateNLPEngine(engine) {
+  if (nlpBusy) return;
+  const prev = String(state.nlp?.engine || 'heuristic');
+  const next = String(engine || '').toLowerCase();
+  if (next !== 'heuristic' && next !== 'onnx') return;
+  nlpBusy = true;
+  try {
+    const resp = await api.post('/nlp', { engine: next });
+    state.nlp = resp || state.nlp;
+    renderNLPMeta();
+    toast(t('nlp.updated'));
+  } catch (e) {
+    if (!state.nlp) state.nlp = {};
+    state.nlp.engine = prev;
+    renderNLPMeta();
+    toast(t('nlp.updateFailed') + ': ' + e.message, 'error');
+  } finally {
+    nlpBusy = false;
+  }
+}
+
+async function updateNLPEntities() {
+  if (nlpBusy) return;
+  const prev = Array.isArray(state.nlp?.entities) ? state.nlp.entities.slice() : [];
+  const selected = NLP_ENTITY_OPTIONS
+    .filter(o => document.getElementById('nlp-ent-' + o.key)?.checked)
     .map(o => o.key);
 
   if (selected.length === 0) {
-    toast(t('presidio.atLeastOne'), 'error');
-    // 恢复上一次选择
-    if (!state.presidio) state.presidio = {};
-    state.presidio.recognizers = prev;
-    renderPresidioRecognizers();
+    toast(t('nlp.atLeastOne'), 'error');
+    if (!state.nlp) state.nlp = {};
+    state.nlp.entities = prev;
+    renderNLPEntities();
     return;
   }
 
-  // 全选时用 all 简化配置
-  const payload = { recognizers: (selected.length === PRESIDIO_RECOGNIZER_OPTIONS.length) ? ['all'] : selected };
-
-  presidioBusy = true;
+  nlpBusy = true;
   try {
-    const resp = await api.post('/presidio', payload);
-    if (!state.presidio) state.presidio = {};
-    state.presidio.enabled = !!(resp?.enabled ?? state.presidio.enabled);
-    state.presidio.recognizers = Array.isArray(resp?.recognizers) ? resp.recognizers : payload.recognizers;
-    renderPresidioMeta();
-    toast(t('presidio.updated'));
+    const resp = await api.post('/nlp', { entities: selected });
+    state.nlp = resp || state.nlp;
+    renderNLPMeta();
+    toast(t('nlp.updated'));
   } catch (e) {
-    if (!state.presidio) state.presidio = {};
-    state.presidio.recognizers = prev;
-    renderPresidioMeta();
-    toast(t('presidio.updateFailed') + ': ' + e.message, 'error');
+    if (!state.nlp) state.nlp = {};
+    state.nlp.entities = prev;
+    renderNLPMeta();
+    toast(t('nlp.updateFailed') + ': ' + e.message, 'error');
   } finally {
-    presidioBusy = false;
+    nlpBusy = false;
+  }
+}
+
+async function updateNLPModelPath() {
+  if (nlpBusy) return;
+  const engine = String(state.nlp?.engine || 'heuristic').toLowerCase();
+  if (engine !== 'onnx') return;
+  const prev = String(state.nlp?.model_path || '');
+  const next = String(document.getElementById('nlp-model-path')?.value || '').trim();
+  nlpBusy = true;
+  try {
+    const resp = await api.post('/nlp', { model_path: next });
+    state.nlp = resp || state.nlp;
+    renderNLPMeta();
+    toast(t('nlp.updated'));
+  } catch (e) {
+    if (!state.nlp) state.nlp = {};
+    state.nlp.model_path = prev;
+    renderNLPMeta();
+    toast(t('nlp.updateFailed') + ': ' + e.message, 'error');
+  } finally {
+    nlpBusy = false;
+  }
+}
+
+async function updateNLPRouteByLang(on) {
+  if (nlpBusy) return;
+  const engine = String(state.nlp?.engine || 'heuristic').toLowerCase();
+  if (engine !== 'onnx') return;
+  const prev = !!state.nlp?.route_by_lang;
+  const next = !!on;
+  nlpBusy = true;
+  try {
+    const resp = await api.post('/nlp', { route_by_lang: next });
+    state.nlp = resp || state.nlp;
+    renderNLPMeta();
+    toast(t('nlp.updated'));
+  } catch (e) {
+    if (!state.nlp) state.nlp = {};
+    state.nlp.route_by_lang = prev;
+    renderNLPMeta();
+    toast(t('nlp.updateFailed') + ': ' + e.message, 'error');
+  } finally {
+    nlpBusy = false;
+  }
+}
+
+async function updateNLPModelPathEN() {
+  if (nlpBusy) return;
+  const engine = String(state.nlp?.engine || 'heuristic').toLowerCase();
+  if (engine !== 'onnx') return;
+  const prev = String(state.nlp?.model_path_en || '');
+  const next = String(document.getElementById('nlp-model-path-en')?.value || '').trim();
+  nlpBusy = true;
+  try {
+    const resp = await api.post('/nlp', { model_path_en: next });
+    state.nlp = resp || state.nlp;
+    renderNLPMeta();
+    toast(t('nlp.updated'));
+  } catch (e) {
+    if (!state.nlp) state.nlp = {};
+    state.nlp.model_path_en = prev;
+    renderNLPMeta();
+    toast(t('nlp.updateFailed') + ': ' + e.message, 'error');
+  } finally {
+    nlpBusy = false;
+  }
+}
+
+async function updateNLPModelPathZH() {
+  if (nlpBusy) return;
+  const engine = String(state.nlp?.engine || 'heuristic').toLowerCase();
+  if (engine !== 'onnx') return;
+  const prev = String(state.nlp?.model_path_zh || '');
+  const next = String(document.getElementById('nlp-model-path-zh')?.value || '').trim();
+  nlpBusy = true;
+  try {
+    const resp = await api.post('/nlp', { model_path_zh: next });
+    state.nlp = resp || state.nlp;
+    renderNLPMeta();
+    toast(t('nlp.updated'));
+  } catch (e) {
+    if (!state.nlp) state.nlp = {};
+    state.nlp.model_path_zh = prev;
+    renderNLPMeta();
+    toast(t('nlp.updateFailed') + ': ' + e.message, 'error');
+  } finally {
+    nlpBusy = false;
+  }
+}
+
+async function updateNLPMaxLoadedModels(v) {
+  if (nlpBusy) return;
+  const engine = String(state.nlp?.engine || 'heuristic').toLowerCase();
+  if (engine !== 'onnx') return;
+  const prev = Number(state.nlp?.max_loaded_models ?? 1);
+  const next = Number(String(v || '').trim());
+  if (Number.isNaN(next) || (next !== 1 && next !== 2)) {
+    document.getElementById('nlp-max-loaded').value = String(prev);
+    return;
+  }
+  nlpBusy = true;
+  try {
+    const resp = await api.post('/nlp', { max_loaded_models: next });
+    state.nlp = resp || state.nlp;
+    renderNLPMeta();
+    toast(t('nlp.updated'));
+  } catch (e) {
+    if (!state.nlp) state.nlp = {};
+    state.nlp.max_loaded_models = prev;
+    renderNLPMeta();
+    toast(t('nlp.updateFailed') + ': ' + e.message, 'error');
+  } finally {
+    nlpBusy = false;
+  }
+}
+
+async function updateNLPMinScore() {
+  if (nlpBusy) return;
+  const engine = String(state.nlp?.engine || 'heuristic').toLowerCase();
+  if (engine !== 'onnx') return;
+  const prev = Number(state.nlp?.min_score ?? 0);
+  const raw = String(document.getElementById('nlp-min-score')?.value || '').trim();
+  const v = raw === '' ? 0 : Number(raw);
+  if (Number.isNaN(v) || v < 0 || v > 1) {
+    document.getElementById('nlp-min-score').value = String(prev);
+    return;
+  }
+  nlpBusy = true;
+  try {
+    const resp = await api.post('/nlp', { min_score: v });
+    state.nlp = resp || state.nlp;
+    renderNLPMeta();
+    toast(t('nlp.updated'));
+  } catch (e) {
+    if (!state.nlp) state.nlp = {};
+    state.nlp.min_score = prev;
+    renderNLPMeta();
+    toast(t('nlp.updateFailed') + ': ' + e.message, 'error');
+  } finally {
+    nlpBusy = false;
   }
 }
 
@@ -2083,6 +2941,268 @@ function renderCertInfo() {
 }
 async function trustCert() { try { await api.post('/certificates/trust'); toast(t('certs.trustedSuccess')); await loadCerts(); } catch (e) { toast(t('certs.failed') + e.message, 'error'); } }
 async function regenerateCert() { if (!confirm(t('certs.regenerateConfirm'))) return; try { await api.post('/certificates/regenerate'); toast(t('certs.regenerated')); await loadCerts(); } catch (e) { toast(t('certs.failed') + e.message, 'error'); } }
+
+async function loadDebug() {
+  const d = await api.get('/debug/events?limit=200');
+  state.debug.status = d?.status || state.debug.status;
+  state.debug.events = Array.isArray(d?.events) ? d.events : [];
+}
+
+function renderDebugMeta() {
+  const st = state.debug?.status || {};
+  const toggle = document.getElementById('debug-enable-toggle');
+  if (toggle) toggle.checked = !!st.enabled;
+
+  const sel = document.getElementById('debug-max-body');
+  if (sel) sel.value = String(st.max_body_bytes ?? 1048576);
+
+  const mh = document.getElementById('debug-mask-headers');
+  if (mh) mh.checked = (st.mask_headers ?? true) ? true : false;
+
+  const hint = document.getElementById('debug-meta-hint');
+  if (hint) {
+    const cnt = Number(st.count || 0);
+    hint.textContent = cnt > 0
+      ? (currentLang === 'zh' ? ('已捕获 ' + cnt + ' 条') : ('Captured ' + cnt))
+      : '';
+  }
+}
+
+function debugStatusTag(ev) {
+  const code = Number(ev?.response_status || 0);
+  if (code >= 200 && code < 400) return '<span class="tag tag-green">' + esc(String(code)) + '</span>';
+  if (code > 0) return '<span class="tag tag-red">' + esc(String(code)) + '</span>';
+  return '<span class="tag tag-yellow">-</span>';
+}
+
+function renderDebugList() {
+  const box = document.getElementById('debug-list');
+  if (!box) return;
+
+  const st = state.debug?.status || {};
+  const list = Array.isArray(state.debug?.events) ? state.debug.events : [];
+  if (!st.enabled && list.length === 0) {
+    box.innerHTML = '<div class="text-muted text-sm py-6 text-center">' + t('debug.empty') + '</div>';
+    return;
+  }
+  if (list.length === 0) {
+    box.innerHTML = '<div class="text-muted text-sm py-6 text-center">' + t('debug.empty') + '</div>';
+    return;
+  }
+
+  box.innerHTML = list.slice().reverse().map(ev => {
+    const id = Number(ev?.id || 0);
+    const line = (ev.method || '') + ' ' + (ev.host || '') + (ev.path || '');
+    const trunc = (ev.request_truncated || ev.response_truncated) ? ('<span class="tag tag-yellow ml-2">' + t('debug.detail.truncated') + '</span>') : '';
+    const click = id ? (' onclick="showDebugDetail(' + id + ')" role="button" tabindex="0"') : '';
+    return '<div class="pattern-item p-4 bg-white rounded-lg border border-border hover:shadow-sm cursor-pointer"' + click + '>' +
+      '<div class="flex justify-between items-start gap-4">' +
+        '<div class="min-w-0">' +
+          '<div class="text-xs text-muted">' + esc(fmtTime(ev.time)) + '</div>' +
+          '<div class="text-sm font-medium text-text truncate">' + esc(line) + '</div>' +
+          '<div class="text-xs text-muted mt-1 truncate">' + esc(ev.url || '') + '</div>' +
+        '</div>' +
+        '<div class="shrink-0 flex items-center gap-2">' + debugStatusTag(ev) + trunc + '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+async function refreshDebug() {
+  try {
+    await loadDebug();
+    renderDebugMeta();
+    renderDebugList();
+  } catch (e) {
+    toast(e.message || String(e), 'error');
+  }
+}
+
+let debugBusy = false;
+async function toggleDebugCapture(on) {
+  if (debugBusy) return;
+  debugBusy = true;
+  try {
+    const st = await api.post('/debug', { enabled: !!on });
+    state.debug.status = st || state.debug.status;
+    await refreshDebug();
+  } catch (e) {
+    toast(e.message || String(e), 'error');
+  } finally {
+    debugBusy = false;
+  }
+}
+
+async function updateDebugSettings() {
+  if (debugBusy) return;
+  debugBusy = true;
+  try {
+    const maxBody = parseInt(document.getElementById('debug-max-body')?.value || '1048576', 10);
+    const maskHeaders = document.getElementById('debug-mask-headers')?.checked ?? true;
+    const st = await api.post('/debug', { max_body_bytes: maxBody, mask_headers: !!maskHeaders });
+    state.debug.status = st || state.debug.status;
+    renderDebugMeta();
+  } catch (e) {
+    toast(e.message || String(e), 'error');
+  } finally {
+    debugBusy = false;
+  }
+}
+
+async function clearDebug() {
+  if (!confirm(t('audit.clearConfirm'))) return;
+  try {
+    await api.del('/debug/events');
+    state.debug.events = [];
+    state.debug.status.count = 0;
+    renderDebugList();
+    toast(t('audit.cleared'));
+  } catch (e) {
+    toast(e.message || String(e), 'error');
+  }
+}
+
+async function copyById(id) {
+  try {
+    const el = document.getElementById(id);
+    const text = String(el?.textContent || '');
+    if (!text) return;
+
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+    }
+    toast(t('logs.copied'));
+  } catch (e) {
+    toast(t('logs.copyFailed') + ': ' + (e.message || String(e)), 'error');
+  }
+}
+
+function prettyMaybe(s) {
+  const t0 = String(s || '').trim();
+  if (!t0) return '';
+  if (t0.startsWith('{') || t0.startsWith('[')) {
+    try { return JSON.stringify(JSON.parse(t0), null, 2); } catch (e) { /* ignore */ }
+  }
+  return String(s || '');
+}
+
+async function showDebugDetail(id) {
+  try {
+    const ev = await api.get('/debug/events/' + id);
+    if (!ev) { toast(t('audit.detail.notFound'), 'error'); return; }
+
+    closeModal();
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay'; overlay.id = 'modal-overlay';
+    overlay.onclick = function(e) { if (e.target === overlay) closeModal(); };
+
+    const reqLine = (ev.method || '') + ' ' + (ev.url || ((ev.host || '') + (ev.path || '')));
+    const respCode = Number(ev?.response?.response_status || 0) || '-';
+
+    const reqHO = prettyMaybe(JSON.stringify(ev?.request?.headers_original || {}, null, 2));
+    const reqHF = prettyMaybe(JSON.stringify(ev?.request?.headers_forwarded || {}, null, 2));
+    const respHO = prettyMaybe(JSON.stringify(ev?.response?.headers_original || {}, null, 2));
+    const respHF = prettyMaybe(JSON.stringify(ev?.response?.headers_forwarded || {}, null, 2));
+
+    const ro = prettyMaybe(ev?.request?.body_original?.text || '');
+    const rf = prettyMaybe(ev?.request?.body_forwarded?.text || '');
+    const so = prettyMaybe(ev?.response?.body_original?.text || '');
+    const sf = prettyMaybe(ev?.response?.body_forwarded?.text || '');
+
+    const tagTruncReq = (ev?.request?.body_original?.truncated || ev?.request?.body_forwarded?.truncated) ? ('<span class="tag tag-yellow ml-2">' + t('debug.detail.truncated') + '</span>') : '';
+    const tagTruncResp = (ev?.response?.body_original?.truncated || ev?.response?.body_forwarded?.truncated) ? ('<span class="tag tag-yellow ml-2">' + t('debug.detail.truncated') + '</span>') : '';
+
+    overlay.innerHTML =
+      '<div class="modal-content" style="width: 980px; max-width: 96vw;">' +
+        '<div class="flex justify-between items-start gap-4 mb-4">' +
+          '<div>' +
+            '<h3 class="text-lg font-bold text-text">' + t('debug.detail.title') + '</h3>' +
+            '<div class="text-xs text-muted mt-1">' + esc(fmtTime(ev.time)) + '</div>' +
+          '</div>' +
+          '<button class="btn btn-secondary" onclick="closeModal()">' + t('debug.detail.close') + '</button>' +
+        '</div>' +
+        '<div class="space-y-6">' +
+          '<div>' +
+            '<div class="flex items-center gap-2 mb-2"><span class="tag tag-blue">' + t('debug.detail.request') + '</span>' + tagTruncReq + '</div>' +
+            '<div class="text-sm"><span class="text-muted">Line</span><div class="mt-1"><code class="text-xs bg-white px-2 py-1 rounded border border-border break-all">' + esc(reqLine) + '</code></div></div>' +
+            '<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">' +
+              '<div><div class="text-xs text-muted mb-1 flex justify-between items-center"><span>' + t('debug.detail.headersOriginal') + '</span><button class="btn btn-secondary text-xs px-3 py-1" onclick="copyById(\'dbg-req-ho\')">' + t('debug.detail.copy') + '</button></div><pre id="dbg-req-ho" class="text-xs bg-white p-3 rounded border border-border overflow-auto max-h-64 whitespace-pre-wrap">' + esc(reqHO) + '</pre></div>' +
+              '<div><div class="text-xs text-muted mb-1 flex justify-between items-center"><span>' + t('debug.detail.headersForwarded') + '</span><button class="btn btn-secondary text-xs px-3 py-1" onclick="copyById(\'dbg-req-hf\')">' + t('debug.detail.copy') + '</button></div><pre id="dbg-req-hf" class="text-xs bg-white p-3 rounded border border-border overflow-auto max-h-64 whitespace-pre-wrap">' + esc(reqHF) + '</pre></div>' +
+            '</div>' +
+            '<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">' +
+              '<div><div class="text-xs text-muted mb-1 flex justify-between items-center"><span>' + t('debug.detail.bodyOriginal') + '</span><button class="btn btn-secondary text-xs px-3 py-1" onclick="copyById(\'dbg-req-bo\')">' + t('debug.detail.copy') + '</button></div><pre id="dbg-req-bo" class="text-xs bg-white p-3 rounded border border-border overflow-auto max-h-64 whitespace-pre-wrap">' + esc(ro) + '</pre></div>' +
+              '<div><div class="text-xs text-muted mb-1 flex justify-between items-center"><span>' + t('debug.detail.bodyForwarded') + '</span><button class="btn btn-secondary text-xs px-3 py-1" onclick="copyById(\'dbg-req-bf\')">' + t('debug.detail.copy') + '</button></div><pre id="dbg-req-bf" class="text-xs bg-white p-3 rounded border border-border overflow-auto max-h-64 whitespace-pre-wrap">' + esc(rf) + '</pre></div>' +
+            '</div>' +
+          '</div>' +
+          '<div>' +
+            '<div class="flex items-center gap-2 mb-2"><span class="tag tag-green">' + t('debug.detail.response') + '</span>' + tagTruncResp + '<span class="text-xs text-muted ml-2">status=' + esc(String(respCode)) + '</span></div>' +
+            '<div class="grid grid-cols-1 md:grid-cols-2 gap-4">' +
+              '<div><div class="text-xs text-muted mb-1 flex justify-between items-center"><span>' + t('debug.detail.headersOriginal') + '</span><button class="btn btn-secondary text-xs px-3 py-1" onclick="copyById(\'dbg-resp-ho\')">' + t('debug.detail.copy') + '</button></div><pre id="dbg-resp-ho" class="text-xs bg-white p-3 rounded border border-border overflow-auto max-h-64 whitespace-pre-wrap">' + esc(respHO) + '</pre></div>' +
+              '<div><div class="text-xs text-muted mb-1 flex justify-between items-center"><span>' + t('debug.detail.headersForwarded') + '</span><button class="btn btn-secondary text-xs px-3 py-1" onclick="copyById(\'dbg-resp-hf\')">' + t('debug.detail.copy') + '</button></div><pre id="dbg-resp-hf" class="text-xs bg-white p-3 rounded border border-border overflow-auto max-h-64 whitespace-pre-wrap">' + esc(respHF) + '</pre></div>' +
+            '</div>' +
+            '<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">' +
+              '<div><div class="text-xs text-muted mb-1 flex justify-between items-center"><span>' + t('debug.detail.bodyOriginal') + '</span><button class="btn btn-secondary text-xs px-3 py-1" onclick="copyById(\'dbg-resp-bo\')">' + t('debug.detail.copy') + '</button></div><pre id="dbg-resp-bo" class="text-xs bg-white p-3 rounded border border-border overflow-auto max-h-64 whitespace-pre-wrap">' + esc(so) + '</pre></div>' +
+              '<div><div class="text-xs text-muted mb-1 flex justify-between items-center"><span>' + t('debug.detail.bodyForwarded') + '</span><button class="btn btn-secondary text-xs px-3 py-1" onclick="copyById(\'dbg-resp-bf\')">' + t('debug.detail.copy') + '</button></div><pre id="dbg-resp-bf" class="text-xs bg-white p-3 rounded border border-border overflow-auto max-h-64 whitespace-pre-wrap">' + esc(sf) + '</pre></div>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+    document.body.appendChild(overlay);
+    overlay.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeModal(); });
+  } catch (e) {
+    toast(e.message || String(e), 'error');
+  }
+}
+
+async function renderDebug() {
+  document.getElementById('main-content').innerHTML =
+    '<div class="mb-8 flex justify-between items-start gap-4">' +
+      '<div><h2 class="text-2xl font-bold text-text">' + t('debug.title') + '</h2><p class="text-muted mt-1">' + t('debug.subtitle') + '</p></div>' +
+      '<div class="flex gap-2">' +
+        '<button class="btn btn-secondary text-sm" onclick="refreshDebug()">' + t('debug.refresh') + '</button>' +
+        '<button class="btn btn-danger text-sm" onclick="clearDebug()">' + t('debug.clear') + '</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="card p-6 mb-6">' +
+      '<div class="flex flex-wrap items-center justify-between gap-4">' +
+        '<div class="flex items-center gap-3">' +
+          '<label class="pill-switch">' +
+            '<input type="checkbox" id="debug-enable-toggle" onchange="toggleDebugCapture(this.checked)">' +
+            '<span class="pill-slider"></span>' +
+          '</label>' +
+          '<div class="text-sm text-text font-medium">' + t('debug.enable') + '</div>' +
+        '</div>' +
+        '<div class="flex flex-wrap items-center gap-4">' +
+          '<label class="text-sm text-muted">' + t('debug.maxBodyBytes') + ' <select id="debug-max-body" class="ml-2" onchange="updateDebugSettings()">' +
+            '<option value="65536">64KB</option>' +
+            '<option value="262144">256KB</option>' +
+            '<option value="1048576">1MB</option>' +
+            '<option value="4194304">4MB</option>' +
+            '<option value="10485760">10MB</option>' +
+            '<option value="20971520">20MB</option>' +
+          '</select></label>' +
+          '<label class="text-sm text-muted flex items-center gap-2"><input type="checkbox" id="debug-mask-headers" onchange="updateDebugSettings()">' + t('debug.maskHeaders') + '</label>' +
+        '</div>' +
+      '</div>' +
+      '<div class="text-xs text-muted mt-3" id="debug-meta-hint"></div>' +
+    '</div>' +
+    '<div class="card p-6">' +
+      '<div id="debug-list" class="space-y-3"><div class="text-muted text-sm py-4 text-center">' + t('audit.connecting') + '</div></div>' +
+    '</div>';
+
+  await refreshDebug();
+}
 
 window.deletePattern = deletePattern;
 window.searchSessions = searchSessions;

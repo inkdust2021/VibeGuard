@@ -52,4 +52,3 @@ func TestDeterministicPlaceholders_跨进程稳定(t *testing.T) {
 		t.Fatalf("关闭后不应处于 deterministic 生效状态")
 	}
 }
-
