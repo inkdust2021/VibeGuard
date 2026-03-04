@@ -1,0 +1,55 @@
+name: Bug Report
+description: Report a bug or unexpected behavior
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a bug! Please fill out the sections below.
+  - type: input
+    id: version
+    attributes:
+      label: VibeGuard Version
+      description: Run `vibeguard --version` or check the binary name
+      placeholder: e.g. v0.3.0
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS and Architecture
+      placeholder: e.g. macOS arm64, Ubuntu 22.04 amd64, Windows 11 x64
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: What did you do? Include config if relevant.
+      placeholder: |
+        1. Start vibeguard with config ...
+        2. Send request to ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What happened instead? Include logs, error messages, or screenshots.
+    validations:
+      required: true
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Any other information that might help (config files, screenshots, etc.)
+    validations:
+      required: false

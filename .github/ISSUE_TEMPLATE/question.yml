@@ -1,0 +1,22 @@
+name: Question
+description: Ask a question or seek help
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have a question about VibeGuard? We're happy to help!
+  - type: textarea
+    id: question
+    attributes:
+      label: Your Question
+      description: Describe what you'd like to know.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Any relevant details (version, OS, config, what you've already tried).
+    validations:
+      required: false
