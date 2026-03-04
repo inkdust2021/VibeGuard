@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build (e.g. v0.2.0)"
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -12,9 +18,23 @@ permissions:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        variant:
+          - name: lite
+            build_tags: ""
+            suffix: ""
+            latest_tag: "latest"
+          - name: full
+            build_tags: "vibeguard_full"
+            suffix: "-full"
+            latest_tag: "latest-full"
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
 
       - name: 设置 QEMU（多架构）
         uses: docker/setup-qemu-action@v3
@@ -29,15 +49,32 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: 计算构建元信息
+        id: buildmeta
+        env:
+          TAG_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          tag="${TAG_NAME}"
+          version="${tag}"
+          if [[ "${version}" == v* ]]; then
+            version="${version#v}"
+          fi
+
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+          echo "commit=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
+          echo "date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "${GITHUB_OUTPUT}"
+
       - name: 生成镜像元数据（tags/labels）
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository_owner }}/vibeguard
           tags: |
-            type=semver,pattern={{version}}
-            type=ref,event=tag
-            type=raw,value=latest
+            type=raw,value=${{ steps.buildmeta.outputs.version }}${{ matrix.variant.suffix }}
+            type=raw,value=${{ steps.buildmeta.outputs.tag }}${{ matrix.variant.suffix }}
+            type=raw,value=${{ matrix.variant.latest_tag }}
 
       - name: 构建并推送
         uses: docker/build-push-action@v6
@@ -47,5 +84,10 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VG_TAG=${{ steps.buildmeta.outputs.tag }}
+            VG_COMMIT=${{ steps.buildmeta.outputs.commit }}
+            VG_BUILD_DATE=${{ steps.buildmeta.outputs.date }}
+            VG_BUILD_TAGS=${{ matrix.variant.build_tags }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
