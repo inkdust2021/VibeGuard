@@ -216,24 +216,8 @@ const i18n = {
 	    'ruleLists.subtitle': '上传/启用订阅式规则文件（.vgrules），更适合通用规则。',
 	    'ruleLists.upload': '上传规则列表',
 	    'ruleLists.noRuleLists': '未配置规则列表',
-		    'keywords.title': '关键词列表',
-		    'keywords.subtitle': '适合具体词条（姓名/项目代号/密钥片段）；通用规则建议放到规则列表。',
-		    'secretFiles.title': '敏感文件',
-		    'secretFiles.subtitle': '从本地文件导入 secret 值并自动脱敏（不会上传文件内容）。',
-		    'secretFiles.none': '未配置敏感文件',
-		    'secretFiles.addTitle': '添加敏感文件',
-		    'secretFiles.path': '文件路径',
-		    'secretFiles.pathPlaceholder': '例如：.env',
-		    'secretFiles.format': '格式',
-		    'secretFiles.format.dotenv': 'dotenv（KEY=VALUE）',
-		    'secretFiles.format.lines': '逐行（每行一个 secret）',
-		    'secretFiles.category': '分类（可选）',
-		    'secretFiles.categoryPlaceholder': '如 DOTENV / SECRET_FILE',
-		    'secretFiles.minLen': '最小长度',
-		    'secretFiles.minLenHint': '过滤过短的值，减少误报。',
-		    'secretFiles.enabled': '启用',
-		    'secretFiles.updated': '敏感文件已更新',
-		    'secretFiles.updateFailed': '敏感文件更新失败',
+	    'keywords.title': '关键词列表',
+	    'keywords.subtitle': '适合具体词条（姓名/项目代号/密钥片段）；通用规则建议放到规则列表。',
 	    'ruleLists.name': '名称（可选）',
 	    'ruleLists.namePlaceholder': '例如：通用敏感信息规则',
 	    'ruleLists.priority': '优先级（1~99）',
@@ -522,24 +506,8 @@ const i18n = {
 	    'ruleLists.subtitle': 'Upload/enable subscription-like rule files (.vgrules) for generic rules.',
 	    'ruleLists.upload': 'Upload Rule List',
 	    'ruleLists.noRuleLists': 'No rule lists configured',
-		    'keywords.title': 'Keywords',
-		    'keywords.subtitle': 'Best for specific tokens (names, codenames, secret fragments). Put reusable rules into rule lists.',
-		    'secretFiles.title': 'Secret files',
-		    'secretFiles.subtitle': 'Import secret values from local files and redact them automatically (file contents are never uploaded).',
-		    'secretFiles.none': 'No secret files configured',
-		    'secretFiles.addTitle': 'Add secret file',
-		    'secretFiles.path': 'File path',
-		    'secretFiles.pathPlaceholder': 'e.g. .env',
-		    'secretFiles.format': 'Format',
-		    'secretFiles.format.dotenv': 'dotenv (KEY=VALUE)',
-		    'secretFiles.format.lines': 'lines (one secret per line)',
-		    'secretFiles.category': 'Category (optional)',
-		    'secretFiles.categoryPlaceholder': 'e.g. DOTENV / SECRET_FILE',
-		    'secretFiles.minLen': 'Min length',
-	    'secretFiles.minLenHint': 'Filters out short values to reduce false positives.',
-	    'secretFiles.enabled': 'Enabled',
-	    'secretFiles.updated': 'Secret file updated',
-	    'secretFiles.updateFailed': 'Failed to update secret file',
+	    'keywords.title': 'Keywords',
+	    'keywords.subtitle': 'Best for specific tokens (names, codenames, secret fragments). Put reusable rules into rule lists.',
 	    'ruleLists.name': 'Name (optional)',
 	    'ruleLists.namePlaceholder': 'e.g., Generic PII rules',
 	    'ruleLists.priority': 'Priority (1-99)',
@@ -850,7 +818,7 @@ async function initLang() {
   applyLang(saved || 'zh');
 }
 
-const state = { stats: { proxy: {}, session: {}, requests: {} }, patterns: { keywords: [], regex: [], builtin: [], exclude: [], secret_files: [] }, rule_lists: [], ui: { patterns_tab: 'rule_lists' }, ner: { enabled: false, presidio_url: '', language: 'en', entities: [], min_score: 0 }, sessions: { total: 0, mappings: [] }, certs: { ca: {} }, audit: { redact_log: true, max_events: 200, events: [], persistence: { available: false, enabled: false, path: '', retention: '' } }, logs: { configured_path: '', effective_path: '', exists: false, lines: [], warning: '' }, debug: { status: { enabled: false, max_body_bytes: 1048576, max_events: 50, mask_headers: true, count: 0 }, events: [] } };
+const state = { stats: { proxy: {}, session: {}, requests: {} }, patterns: { keywords: [], regex: [], builtin: [], exclude: [] }, rule_lists: [], ui: { patterns_tab: 'rule_lists' }, ner: { enabled: false, presidio_url: '', language: 'en', entities: [], min_score: 0 }, sessions: { total: 0, mappings: [] }, certs: { ca: {} }, audit: { redact_log: true, max_events: 200, events: [], persistence: { available: false, enabled: false, path: '', retention: '' } }, logs: { configured_path: '', effective_path: '', exists: false, lines: [], warning: '' }, debug: { status: { enabled: false, max_body_bytes: 1048576, max_events: 50, mask_headers: true, count: 0 }, events: [] } };
 state.auth = { configured: false, authenticated: false, broken: false, broken_error: '' };
 let auditES = null;
 let logsES = null;
@@ -962,7 +930,6 @@ function normalizePatterns(p) {
   const rawKeywords = raw.keywords ?? raw.Keywords ?? [];
   const rawBuiltin = raw.builtin ?? raw.Builtin ?? [];
   const rawExclude = raw.exclude ?? raw.Exclude ?? [];
-  const rawSecretFiles = raw.secret_files ?? raw.secretFiles ?? raw.SecretFiles ?? [];
 
   const regex = Array.isArray(rawRegex)
     ? rawRegex.map(r => ({ pattern: r?.pattern ?? r?.Pattern ?? '', category: r?.category ?? r?.Category ?? '' })).filter(r => r.pattern !== '')
@@ -975,17 +942,7 @@ function normalizePatterns(p) {
   const builtin = Array.isArray(rawBuiltin) ? rawBuiltin : [];
   const exclude = Array.isArray(rawExclude) ? rawExclude : [];
 
-  const secret_files = Array.isArray(rawSecretFiles)
-    ? rawSecretFiles.map(s => ({
-        path: s?.path ?? s?.Path ?? '',
-        format: String(s?.format ?? s?.Format ?? 'dotenv'),
-        category: s?.category ?? s?.Category ?? '',
-        min_value_len: Number(s?.min_value_len ?? s?.MinValueLen ?? 8),
-        enabled: (s?.enabled ?? s?.Enabled) !== false
-      })).filter(s => (s.path || '').trim() !== '')
-    : [];
-
-  return { keywords, regex, builtin, exclude, secret_files };
+  return { keywords, regex, builtin, exclude };
 }
 
 	function route() {
@@ -1805,28 +1762,18 @@ async function renderLogs() {
 	  await loadRuleLists();
 	}
 
-		async function renderKeywordsPage() {
-		  document.getElementById('main-content').innerHTML =
-		    '<div class="mb-8"><h2 class="text-2xl font-bold text-text">' + t('keywords.title') + '</h2><p class="text-muted mt-1">' + t('keywords.subtitle') + '</p></div>' +
-		    '<div class="card p-6 mb-6">' +
-		      '<div class="flex justify-between items-center mb-4">' +
-		        '<h3 class="font-semibold text-text">' + t('keywords.title') + '</h3>' +
-		        '<button class="btn btn-primary text-sm" onclick="showAddKeyword()">' + t('patterns.add') + '</button>' +
-		      '</div>' +
-		      '<div id="keywords-list" class="space-y-2"><div class="text-muted text-sm py-4 text-center">' + t('patterns.loading') + '</div></div>' +
-		    '</div>' +
-		    '<div class="card p-6">' +
-		      '<div class="flex justify-between items-center mb-2">' +
-		        '<div>' +
-		          '<h3 class="font-semibold text-text">' + t('secretFiles.title') + '</h3>' +
-		          '<div class="text-xs text-muted mt-1">' + t('secretFiles.subtitle') + '</div>' +
-		        '</div>' +
-		        '<button class="btn btn-primary text-sm" onclick="showAddSecretFile()">' + t('patterns.add') + '</button>' +
-		      '</div>' +
-		      '<div id="secret-files-list" class="space-y-2 mt-4"><div class="text-muted text-sm py-4 text-center">' + t('patterns.loading') + '</div></div>' +
-		    '</div>';
-		  await loadPatterns();
-		}
+	async function renderKeywordsPage() {
+	  document.getElementById('main-content').innerHTML =
+	    '<div class="mb-8"><h2 class="text-2xl font-bold text-text">' + t('keywords.title') + '</h2><p class="text-muted mt-1">' + t('keywords.subtitle') + '</p></div>' +
+	    '<div class="card p-6">' +
+	      '<div class="flex justify-between items-center mb-4">' +
+	        '<h3 class="font-semibold text-text">' + t('keywords.title') + '</h3>' +
+	        '<button class="btn btn-primary text-sm" onclick="showAddKeyword()">' + t('patterns.add') + '</button>' +
+	      '</div>' +
+	      '<div id="keywords-list" class="space-y-2"><div class="text-muted text-sm py-4 text-center">' + t('patterns.loading') + '</div></div>' +
+	    '</div>';
+	  await loadPatterns();
+	}
 
 	async function renderNERPage() {
 	  document.getElementById('main-content').innerHTML =
@@ -2182,68 +2129,10 @@ async function subscribeRuleList(payload) {
 }
 async function loadPatterns() { try { state.patterns = normalizePatterns(await api.get('/patterns')); renderPatternsLists(); } catch (e) { console.error(e); } }
 function renderPatternsLists() {
-  renderKeywordsList();
-  renderSecretFilesList();
-}
-
-function renderKeywordsList() {
   const re = document.getElementById('keywords-list');
-  if (!re) return;
   const list = state.patterns?.keywords || [];
   if (list.length === 0) re.innerHTML = '<div class="text-muted text-sm py-4 text-center">' + t('patterns.noRegex') + '</div>';
-  else re.innerHTML = list.map((k, i) => '<div class="pattern-item flex justify-between items-center p-3 bg-surface rounded-lg"><div class="flex items-center gap-2"><code class="text-sm bg-white px-2 py-1 rounded">' + esc(k.value) + '</code><span class="tag tag-blue">' + esc(k.category || 'TEXT') + '</span></div><button class="delete-btn text-muted hover:text-danger" onclick="deletePattern(\\'keywords\\',' + i + ')"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button></div>').join('');
-}
-
-let secretFilesBusy = false;
-function renderSecretFilesList() {
-  const el = document.getElementById('secret-files-list');
-  if (!el) return;
-
-  const list = Array.isArray(state.patterns?.secret_files) ? state.patterns.secret_files : [];
-  if (list.length === 0) {
-    el.innerHTML = '<div class="text-muted text-sm py-4 text-center">' + t('secretFiles.none') + '</div>';
-    return;
-  }
-
-  el.innerHTML = list.map((s, i) => {
-    const path = String(s?.path || '').trim();
-    const format = String(s?.format || 'dotenv').trim().toLowerCase();
-    const category = String(s?.category || '').trim();
-    const minLen = Number.isFinite(Number(s?.min_value_len)) ? Number(s.min_value_len) : 8;
-    const enabled = (s?.enabled ?? true) !== false;
-    const catLabel = category ? '<span class="tag tag-blue">' + esc(category) + '</span>' : '';
-    const fmtLabel = '<span class="tag tag-yellow">' + esc(format) + '</span>';
-    const lenLabel = '<span class="tag tag-yellow">min=' + esc(String(minLen)) + '</span>';
-    return '' +
-      '<div class="pattern-item flex justify-between items-center gap-4 p-3 bg-surface rounded-lg">' +
-        '<div class="min-w-0 flex items-center gap-2 flex-wrap">' +
-          '<code class="text-sm bg-white px-2 py-1 rounded break-all">' + esc(path) + '</code>' +
-          fmtLabel + lenLabel + catLabel +
-        '</div>' +
-        '<div class="flex items-center gap-3 shrink-0">' +
-          '<label class="text-xs text-muted flex items-center gap-2"><input type="checkbox" ' + (enabled ? 'checked' : '') + ' onchange="toggleSecretFileEnabled(' + i + ', this.checked)">' + t('secretFiles.enabled') + '</label>' +
-          '<button class="delete-btn text-muted hover:text-danger" onclick="deletePattern(\\'secret_files\\',' + i + ')"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>' +
-        '</div>' +
-      '</div>';
-  }).join('');
-}
-
-async function toggleSecretFileEnabled(idx, on) {
-  if (secretFilesBusy) return;
-  const list = Array.isArray(state.patterns?.secret_files) ? state.patterns.secret_files : [];
-  const prev = list[idx];
-  if (!prev) return;
-  secretFilesBusy = true;
-  try {
-    await api.post('/patterns', { type: 'secret_file_update', index: idx, enabled: !!on });
-    toast(t('secretFiles.updated'));
-    await loadPatterns();
-  } catch (e) {
-    toast(t('secretFiles.updateFailed') + ': ' + e.message, 'error');
-    await loadPatterns();
-  } finally {
-    secretFilesBusy = false;
-  }
+  else re.innerHTML = list.map((k, i) => '<div class="pattern-item flex justify-between items-center p-3 bg-surface rounded-lg"><div class="flex items-center gap-2"><code class="text-sm bg-white px-2 py-1 rounded">' + esc(k.value) + '</code><span class="tag tag-blue">' + esc(k.category || 'TEXT') + '</span></div><button class="delete-btn text-muted hover:text-danger" onclick="deletePattern(\'keywords\',' + i + ')"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button></div>').join('');
 }
 async function deletePattern(type, idx) { if (!confirm(t('patterns.deleteConfirm'))) return; try { await api.del('/patterns/' + type + '/' + idx); toast(t('patterns.deleted')); await loadPatterns(); } catch (e) { toast(t('patterns.deleteFailed') + ': ' + e.message, 'error'); } }
 
@@ -2459,44 +2348,6 @@ function confirmAddKeyword() {
   if (!cat) cat = 'TEXT';
   closeModal();
   addPattern('keyword', { value: v, category: cat });
-}
-
-function showAddSecretFile() {
-  const overlay = document.createElement('div');
-  overlay.className = 'modal-overlay'; overlay.id = 'modal-overlay';
-  overlay.onclick = function(e) { if (e.target === overlay) closeModal(); };
-  overlay.innerHTML = '<div class="modal-content"><h3 class="text-lg font-bold text-text mb-6">' + esc(t('secretFiles.addTitle')) + '</h3>' +
-    '<div class="mb-4"><label class="block text-sm font-medium text-text mb-2">' + t('secretFiles.path') + ' <span class="text-danger">*</span></label>' +
-      '<input type="text" id="secret-file-path" class="w-full font-mono" placeholder="' + esc(t('secretFiles.pathPlaceholder')) + '"></div>' +
-    '<div class="mb-4"><label class="block text-sm font-medium text-text mb-2">' + t('secretFiles.format') + '</label>' +
-      '<select id="secret-file-format" class="w-full font-mono">' +
-        '<option value="dotenv">' + esc(t('secretFiles.format.dotenv')) + '</option>' +
-        '<option value="lines">' + esc(t('secretFiles.format.lines')) + '</option>' +
-      '</select></div>' +
-    '<div class="mb-4"><label class="block text-sm font-medium text-text mb-2">' + t('secretFiles.minLen') + '</label>' +
-      '<input type="number" id="secret-file-minlen" min="1" max="1024" step="1" class="w-full font-mono" value="8">' +
-      '<div class="text-xs text-muted mt-2">' + t('secretFiles.minLenHint') + '</div></div>' +
-    '<div class="mb-4"><label class="block text-sm font-medium text-text mb-2">' + t('secretFiles.category') + '</label>' +
-      '<input type="text" id="secret-file-category" class="w-full font-mono" placeholder="' + esc(t('secretFiles.categoryPlaceholder')) + '"></div>' +
-    '<div class="mb-4"><label class="text-sm text-muted flex items-center gap-2"><input type="checkbox" id="secret-file-enabled" checked>' + t('secretFiles.enabled') + '</label></div>' +
-    '<div class="flex justify-end gap-3 mt-6"><button class="btn btn-secondary" onclick="closeModal()">' + t('patterns.cancel') + '</button>' +
-    '<button class="btn btn-primary" onclick="confirmAddSecretFile()">' + t('patterns.confirm') + '</button></div></div>';
-  document.body.appendChild(overlay);
-  setTimeout(function() { var el = document.getElementById('secret-file-path'); if (el) el.focus(); }, 100);
-}
-
-function confirmAddSecretFile() {
-  const path = sanitizeInputText(document.getElementById('secret-file-path')?.value || '');
-  if (!path) { toast(t('patterns.valueRequired'), 'error'); return; }
-  const format = String(document.getElementById('secret-file-format')?.value || 'dotenv').trim().toLowerCase();
-  const rawMin = sanitizeInputText(document.getElementById('secret-file-minlen')?.value || '');
-  let minLen = parseInt(rawMin, 10);
-  if (!Number.isFinite(minLen) || minLen < 1) minLen = 8;
-  if (minLen > 1024) minLen = 1024;
-  const enabled = !!document.getElementById('secret-file-enabled')?.checked;
-  const category = sanitizeCategoryInput(document.getElementById('secret-file-category')?.value || '');
-  closeModal();
-  addPattern('secret_file', { path: path, format: format, min_value_len: minLen, category: category, enabled: enabled });
 }
 const MASK_VARS = {
   '#': { desc: { zh: '单个数字 (0-9)', en: 'Single digit (0-9)' } },
