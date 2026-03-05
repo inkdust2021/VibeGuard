@@ -68,3 +68,24 @@ func TestParseLineValues(t *testing.T) {
 		t.Fatalf("unexpected values: %#v", values)
 	}
 }
+
+func TestFullContentVariants_NormalizesLineEndingsAndTrims(t *testing.T) {
+	in := []byte("\ufeffline1\r\nline2\r\n\r\n")
+	out := fullContentVariants(in, 1)
+	if len(out) == 0 {
+		t.Fatalf("expected variants, got none")
+	}
+	seen := map[string]bool{}
+	for _, v := range out {
+		seen[v] = true
+	}
+	if !seen["line1\r\nline2\r\n\r\n"] {
+		t.Fatalf("missing raw variant, got: %#v", out)
+	}
+	if !seen["line1\nline2\n\n"] {
+		t.Fatalf("missing normalized variant, got: %#v", out)
+	}
+	if !seen["line1\nline2"] {
+		t.Fatalf("missing trimmed variant, got: %#v", out)
+	}
+}

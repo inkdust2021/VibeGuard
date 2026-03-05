@@ -13,7 +13,8 @@ import (
 	"github.com/inkdust2021/vibeguard/internal/pii_next/keywords"
 )
 
-const maxSecretFileBytes = 1 << 20 // 1 MiB
+const maxSecretFileBytes = 1 << 20     // 1 MiB
+const maxSecretPatternBytes = 64 << 10 // 64 KiB (avoid huge patterns impacting memory/CPU)
 
 var dotenvKeyRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
@@ -70,6 +71,21 @@ func LoadKeywords(sources []config.SecretFileConfig) ([]keywords.Keyword, []erro
 			minLen = 8
 		}
 
+		// Also treat the entire file content as a keyword (best-effort).
+		// This helps when users paste/send a whole file into a prompt (or parts that include newlines),
+		// without requiring them to enumerate individual secrets.
+		for _, v := range fullContentVariants(data, minLen) {
+			if len(v) > maxSecretPatternBytes {
+				warns = append(warns, fmt.Errorf("secret_files: %q content pattern too large (%d bytes > %d bytes), skipped", path, len(v), maxSecretPatternBytes))
+				continue
+			}
+			if _, ok := seen[v]; ok {
+				continue
+			}
+			seen[v] = struct{}{}
+			out = append(out, keywords.Keyword{Text: v, Category: cat})
+		}
+
 		var values []string
 		switch format {
 		case "dotenv":
@@ -98,6 +114,45 @@ func LoadKeywords(sources []config.SecretFileConfig) ([]keywords.Keyword, []erro
 	}
 
 	return out, warns
+}
+
+func fullContentVariants(data []byte, minLen int) []string {
+	if len(data) == 0 {
+		return nil
+	}
+	if minLen <= 0 {
+		minLen = 1
+	}
+
+	s0 := string(data)
+	// Drop UTF-8 BOM if present.
+	s0 = strings.TrimPrefix(s0, "\ufeff")
+	s1 := normalizeLineEndings(s0)
+	s2 := strings.TrimRight(s1, " \t\r\n")
+	s3 := strings.TrimLeft(s2, " \t\r\n")
+
+	var out []string
+	for _, s := range []string{s0, s1, s2, s3} {
+		if len(s) < minLen {
+			continue
+		}
+		// Avoid patterns that are "mostly whitespace".
+		if strings.TrimSpace(s) == "" {
+			continue
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
+func normalizeLineEndings(s string) string {
+	if s == "" {
+		return s
+	}
+	// Normalize CRLF/CR into LF to improve match rate across different clients.
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	s = strings.ReplaceAll(s, "\r", "\n")
+	return s
 }
 
 func parseLineValues(data []byte, minLen int) ([]string, error) {
