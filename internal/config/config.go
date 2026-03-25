@@ -30,6 +30,9 @@ type ProxyConfig struct {
 	// - global: MITM for all hosts (default; best for HTTP(S)_PROXY env usage)
 	// - targets: MITM only for enabled hosts in targets (safer; avoids impacting non-target traffic)
 	InterceptMode string `yaml:"intercept_mode"`
+	// WebSocketRedactionBeta enables best-effort WebSocket text-message redaction/restore.
+	// It is intentionally off by default because some servers/extensions may be incompatible.
+	WebSocketRedactionBeta bool `yaml:"websocket_redaction_beta"`
 }
 
 // PatternsConfig holds pattern matching configuration
@@ -145,9 +148,10 @@ type AuditDBConfig struct {
 // Default configuration values
 var defaultConfig = Config{
 	Proxy: ProxyConfig{
-		Listen:            "127.0.0.1:28657",
-		PlaceholderPrefix: "__VG_",
-		InterceptMode:     "global",
+		Listen:                 "127.0.0.1:28657",
+		PlaceholderPrefix:      "__VG_",
+		InterceptMode:          "global",
+		WebSocketRedactionBeta: false,
 	},
 	Patterns: PatternsConfig{
 		Keywords:    []KeywordPattern{},
@@ -800,6 +804,9 @@ func mergeConfigs(global, project Config) Config {
 	}
 	if project.Proxy.InterceptMode != "" {
 		result.Proxy.InterceptMode = project.Proxy.InterceptMode
+	}
+	if project.Proxy.WebSocketRedactionBeta {
+		result.Proxy.WebSocketRedactionBeta = true
 	}
 	if project.Session.TTL != "" {
 		result.Session.TTL = project.Session.TTL

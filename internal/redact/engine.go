@@ -7,6 +7,7 @@ import (
 
 	"github.com/inkdust2021/vibeguard/internal/ahocorasick"
 	"github.com/inkdust2021/vibeguard/internal/session"
+	"github.com/inkdust2021/vibeguard/internal/textsafe"
 )
 
 // Match represents a detected sensitive data match
@@ -80,62 +81,77 @@ func (e *Engine) RedactWithMatches(input []byte) ([]byte, []Match) {
 	var matches []Match
 
 	e.ensureKeywordMatcher()
+	spans := textsafe.RedactableSpans(input)
 	if e.kwAC != nil {
 		// Rough estimate: each keyword hits ~0-1 times; preallocation reduces growth.
 		matches = make([]Match, 0, min(len(e.kwCats), 64))
-
-		scratchAny := e.kwScratch.Get()
-		lastEnd, _ := scratchAny.([]int)
-
-		e.kwAC.EachMatchNonOverlappingPerPattern(input, lastEnd, func(id, start, end int) bool {
-			cat := ""
-			if id >= 0 && id < len(e.kwCats) {
-				cat = e.kwCats[id]
-			}
-
-			orig := string(input[start:end])
-			if e.isExcluded(orig) {
-				return true
-			}
-			matches = append(matches, Match{
-				Start:    start,
-				End:      end,
-				Original: orig,
-				Category: cat,
-			})
-			return true
-		})
-
-		if lastEnd != nil {
-			e.kwScratch.Put(lastEnd)
-		}
 	}
 
-	// Regex matching
-	for i, re := range e.regex {
-		locs := re.FindAllSubmatchIndex(input, -1)
-		for _, loc := range locs {
-			if len(loc) < 2 {
-				continue
-			}
+	for _, span := range spans {
+		segment := input[span.Start:span.End]
+		if len(segment) == 0 {
+			continue
+		}
 
-			start, end := loc[0], loc[1]
-			// If capture groups exist, prefer the first capture group's range for redaction replacement.
-			if len(loc) >= 4 && loc[2] >= 0 && loc[3] >= 0 {
-				start, end = loc[2], loc[3]
-			}
-			if start < 0 || end < 0 || start >= end || end > len(input) {
-				continue
-			}
+		if e.kwAC != nil {
+			scratchAny := e.kwScratch.Get()
+			lastEnd, _ := scratchAny.([]int)
 
-			original := string(input[start:end])
-			if !e.isExcluded(original) {
+			e.kwAC.EachMatchNonOverlappingPerPattern(segment, lastEnd, func(id, start, end int) bool {
+				cat := ""
+				if id >= 0 && id < len(e.kwCats) {
+					cat = e.kwCats[id]
+				}
+
+				globalStart := span.Start + start
+				globalEnd := span.Start + end
+				orig := string(input[globalStart:globalEnd])
+				if e.isExcluded(orig) {
+					return true
+				}
 				matches = append(matches, Match{
-					Start:    start,
-					End:      end,
-					Original: original,
-					Category: e.regexCats[i],
+					Start:    globalStart,
+					End:      globalEnd,
+					Original: orig,
+					Category: cat,
 				})
+				return true
+			})
+
+			if lastEnd != nil {
+				e.kwScratch.Put(lastEnd)
+			}
+		}
+
+		// 正则也只在安全文本段内执行，避免把 ANSI/控制字节吞进去。
+		for i, re := range e.regex {
+			locs := re.FindAllSubmatchIndex(segment, -1)
+			for _, loc := range locs {
+				if len(loc) < 2 {
+					continue
+				}
+
+				start, end := loc[0], loc[1]
+				// If capture groups exist, prefer the first capture group's range for redaction replacement.
+				if len(loc) >= 4 && loc[2] >= 0 && loc[3] >= 0 {
+					start, end = loc[2], loc[3]
+				}
+
+				globalStart := span.Start + start
+				globalEnd := span.Start + end
+				if globalStart < 0 || globalEnd < 0 || globalStart >= globalEnd || globalEnd > len(input) {
+					continue
+				}
+
+				original := string(input[globalStart:globalEnd])
+				if !e.isExcluded(original) {
+					matches = append(matches, Match{
+						Start:    globalStart,
+						End:      globalEnd,
+						Original: original,
+						Category: e.regexCats[i],
+					})
+				}
 			}
 		}
 	}
