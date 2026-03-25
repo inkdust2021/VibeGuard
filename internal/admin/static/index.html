@@ -139,6 +139,10 @@
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z"/></svg>
           <span data-i18n="nav.debug">调试抓包</span>
         </a>
+        <a href="#/settings" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-text" data-page="settings">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317a1 1 0 011.35-.936l.838.363a1 1 0 00.796 0l.838-.363a1 1 0 011.35.936l.08.91a1 1 0 00.49.79l.746.455a1 1 0 01.364 1.35l-.364.838a1 1 0 000 .796l.364.838a1 1 0 01-.364 1.35l-.746.455a1 1 0 00-.49.79l-.08.91a1 1 0 01-1.35.936l-.838-.363a1 1 0 00-.796 0l-.838.363a1 1 0 01-1.35-.936l-.08-.91a1 1 0 00-.49-.79l-.746-.455a1 1 0 01-.364-1.35l.364-.838a1 1 0 000-.796l-.364-.838a1 1 0 01.364-1.35l.746-.455a1 1 0 00.49-.79l.08-.91z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9.75A2.25 2.25 0 1112 14.25A2.25 2.25 0 0112 9.75z"/></svg>
+          <span data-i18n="nav.settings">设置</span>
+        </a>
       </nav>
       <div class="p-4 border-t border-border">
         <div class="flex justify-between items-center mb-2">
@@ -173,6 +177,7 @@ const i18n = {
 	    'nav.certs': '证书管理',
 	    'nav.logs': '调试日志',
 	    'nav.debug': '调试抓包',
+	    'nav.settings': '设置',
 	    'status.running': '运行中',
     'auth.setup.title': '设置管理密码',
     'auth.setup.subtitle': '首次访问管理面板需要设置一个密码，用于保护本机管理端 API。',
@@ -409,6 +414,17 @@ const i18n = {
     'debug.detail.truncated': '已截断',
     'debug.detail.copy': '复制',
     'debug.detail.close': '关闭',
+    'settings.title': '设置',
+    'settings.subtitle': '代理实验功能和运行时开关。',
+    'settings.experimental': '实验功能',
+    'settings.websocket.title': 'WebSocket 脱敏',
+    'settings.websocket.beta': 'Beta',
+    'settings.websocket.desc': '对 WebSocket 文本消息做最佳努力的上行脱敏与下行还原。',
+    'settings.websocket.statusOn': '已开启',
+    'settings.websocket.statusOff': '已关闭',
+    'settings.websocket.hint': '仅处理未压缩的文本消息；二进制帧、控制帧和带压缩扩展的数据帧会自动透传。部分服务端可能仍会因 MITM/TLS 指纹拒绝连接。',
+    'settings.updated': '设置已更新',
+    'settings.updateFailed': '设置更新失败',
     'audit.title': '拦截记录',
     'audit.subtitle': '每次请求是否命中脱敏规则，以及命中的内容（默认仅显示预览）',
     'audit.clear': '清空',
@@ -479,6 +495,7 @@ const i18n = {
 	    'nav.certs': 'Certificates',
 	    'nav.logs': 'Debug Logs',
 	    'nav.debug': 'Packet Capture',
+	    'nav.settings': 'Settings',
 	    'status.running': 'Running',
     'auth.setup.title': 'Set Admin Password',
     'auth.setup.subtitle': 'First-time access requires setting a password to protect the local admin API.',
@@ -715,6 +732,17 @@ const i18n = {
     'debug.detail.truncated': 'Truncated',
     'debug.detail.copy': 'Copy',
     'debug.detail.close': 'Close',
+    'settings.title': 'Settings',
+    'settings.subtitle': 'Proxy experiments and runtime feature flags.',
+    'settings.experimental': 'Experimental',
+    'settings.websocket.title': 'WebSocket Redaction',
+    'settings.websocket.beta': 'Beta',
+    'settings.websocket.desc': 'Best-effort upstream redaction and downstream restore for WebSocket text messages.',
+    'settings.websocket.statusOn': 'Enabled',
+    'settings.websocket.statusOff': 'Disabled',
+    'settings.websocket.hint': 'Only uncompressed text messages are transformed. Binary/control frames and compressed extension frames are passed through. Some servers may still reject MITM/TLS fingerprints.',
+    'settings.updated': 'Settings updated',
+    'settings.updateFailed': 'Failed to update settings',
     'audit.title': 'Audit',
     'audit.subtitle': 'Per-request redaction hits and matched content (preview by default)',
     'audit.clear': 'Clear',
@@ -850,7 +878,7 @@ async function initLang() {
   applyLang(saved || 'zh');
 }
 
-const state = { stats: { proxy: {}, session: {}, requests: {} }, patterns: { keywords: [], regex: [], builtin: [], exclude: [], secret_files: [] }, rule_lists: [], ui: { patterns_tab: 'rule_lists' }, ner: { enabled: false, presidio_url: '', language: 'en', entities: [], min_score: 0 }, sessions: { total: 0, mappings: [] }, certs: { ca: {} }, audit: { redact_log: true, max_events: 200, events: [], persistence: { available: false, enabled: false, path: '', retention: '' } }, logs: { configured_path: '', effective_path: '', exists: false, lines: [], warning: '' }, debug: { status: { enabled: false, max_body_bytes: 1048576, max_events: 50, mask_headers: true, count: 0 }, events: [] } };
+const state = { stats: { proxy: {}, session: {}, requests: {} }, patterns: { keywords: [], regex: [], builtin: [], exclude: [], secret_files: [] }, rule_lists: [], ui: { patterns_tab: 'rule_lists' }, ner: { enabled: false, presidio_url: '', language: 'en', entities: [], min_score: 0 }, sessions: { total: 0, mappings: [] }, certs: { ca: {} }, audit: { redact_log: true, max_events: 200, events: [], persistence: { available: false, enabled: false, path: '', retention: '' } }, logs: { configured_path: '', effective_path: '', exists: false, lines: [], warning: '' }, debug: { status: { enabled: false, max_body_bytes: 1048576, max_events: 50, mask_headers: true, count: 0 }, events: [] }, settings: { proxy: { websocket_redaction_beta: false } } };
 state.auth = { configured: false, authenticated: false, broken: false, broken_error: '' };
 let auditES = null;
 let logsES = null;
@@ -1013,6 +1041,7 @@ function normalizePatterns(p) {
 	  else if (p === 'certs') renderCerts();
 	  else if (p === 'logs') renderLogs();
 	  else if (p === 'debug') renderDebug();
+	  else if (p === 'settings') renderSettings();
 	  else c.innerHTML = '<div class="text-center py-20 text-muted">Page not found</div>';
 	}
 
@@ -2902,6 +2931,77 @@ async function toggleDeterministicPlaceholders(on) {
   } finally {
     sessionsDeterministicBusy = false;
   }
+}
+
+async function loadManagerSettings() {
+  const d = await api.get('/settings');
+  state.settings = {
+    proxy: {
+      websocket_redaction_beta: !!d?.proxy?.websocket_redaction_beta
+    }
+  };
+}
+
+function renderSettingsMeta() {
+  const enabled = !!(state.settings?.proxy?.websocket_redaction_beta);
+  const tag = document.getElementById('settings-ws-tag');
+  const toggle = document.getElementById('settings-ws-toggle');
+  if (tag) {
+    tag.textContent = enabled ? t('settings.websocket.statusOn') : t('settings.websocket.statusOff');
+    tag.className = 'tag ' + (enabled ? 'tag-green' : 'tag-yellow');
+  }
+  if (toggle) toggle.checked = enabled;
+}
+
+let settingsBusy = false;
+async function toggleWebSocketRedactionBeta(on) {
+  if (settingsBusy) return;
+  const prev = !!(state.settings?.proxy?.websocket_redaction_beta);
+  settingsBusy = true;
+  try {
+    const d = await api.post('/settings', { proxy: { websocket_redaction_beta: !!on } });
+    state.settings = {
+      proxy: {
+        websocket_redaction_beta: !!d?.proxy?.websocket_redaction_beta
+      }
+    };
+    renderSettingsMeta();
+    toast(t('settings.updated'));
+  } catch (e) {
+    if (!state.settings) state.settings = { proxy: { websocket_redaction_beta: prev } };
+    if (!state.settings.proxy) state.settings.proxy = { websocket_redaction_beta: prev };
+    state.settings.proxy.websocket_redaction_beta = prev;
+    renderSettingsMeta();
+    toast(t('settings.updateFailed') + ': ' + e.message, 'error');
+  } finally {
+    settingsBusy = false;
+  }
+}
+
+async function renderSettings() {
+  document.getElementById('main-content').innerHTML =
+    '<div class="mb-8"><h2 class="text-2xl font-bold text-text">' + t('settings.title') + '</h2><p class="text-muted mt-1">' + t('settings.subtitle') + '</p></div>' +
+    '<div class="card p-6">' +
+      '<div class="flex items-start justify-between gap-4">' +
+        '<div class="min-w-0">' +
+          '<div class="flex flex-wrap items-center gap-2 mb-2">' +
+            '<h3 class="font-semibold text-text">' + t('settings.websocket.title') + '</h3>' +
+            '<span class="tag tag-yellow">' + t('settings.websocket.beta') + '</span>' +
+            '<span class="tag tag-blue">' + t('settings.experimental') + '</span>' +
+            '<span id="settings-ws-tag" class="tag tag-yellow">' + t('settings.websocket.statusOff') + '</span>' +
+          '</div>' +
+          '<div class="text-sm text-text">' + t('settings.websocket.desc') + '</div>' +
+          '<div class="text-xs text-muted mt-3 max-w-3xl">' + t('settings.websocket.hint') + '</div>' +
+        '</div>' +
+        '<label class="pill-switch shrink-0" title="' + esc(t('settings.websocket.hint')) + '">' +
+          '<input type="checkbox" id="settings-ws-toggle" onchange="toggleWebSocketRedactionBeta(this.checked)">' +
+          '<span class="pill-slider"></span>' +
+        '</label>' +
+      '</div>' +
+    '</div>';
+
+  await loadManagerSettings();
+  renderSettingsMeta();
 }
 
 async function renderCerts() {

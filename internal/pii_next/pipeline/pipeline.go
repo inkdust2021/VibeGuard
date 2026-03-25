@@ -6,6 +6,7 @@ import (
 	"github.com/inkdust2021/vibeguard/internal/pii_next/recognizer"
 	"github.com/inkdust2021/vibeguard/internal/redact"
 	"github.com/inkdust2021/vibeguard/internal/session"
+	"github.com/inkdust2021/vibeguard/internal/textsafe"
 )
 
 // Pipeline merges hits from multiple Recognizers and performs unified replacement.
@@ -55,22 +56,34 @@ func (p *Pipeline) RedactWithMatches(input []byte) ([]byte, []redact.Match) {
 		return append([]byte(nil), input...), nil
 	}
 
-	raw := p.reg.RecognizeAll(input)
-	cands := make([]recognizer.Match, 0, len(raw))
-	for _, m := range raw {
-		if m.Start < 0 || m.End < 0 || m.Start >= m.End || m.End > len(input) {
+	cands := make([]recognizer.Match, 0, 16)
+	for _, span := range textsafe.RedactableSpans(input) {
+		segment := input[span.Start:span.End]
+		if len(segment) == 0 {
 			continue
 		}
-		if m.Category == "" {
-			continue
-		}
-		if p.exclude != nil {
-			original := string(input[m.Start:m.End])
-			if _, ok := p.exclude[original]; ok {
+
+		raw := p.reg.RecognizeAll(segment)
+		for _, m := range raw {
+			globalStart := span.Start + m.Start
+			globalEnd := span.Start + m.End
+			if globalStart < 0 || globalEnd < 0 || globalStart >= globalEnd || globalEnd > len(input) {
 				continue
 			}
+			if m.Category == "" {
+				continue
+			}
+			if p.exclude != nil {
+				original := string(input[globalStart:globalEnd])
+				if _, ok := p.exclude[original]; ok {
+					continue
+				}
+			}
+
+			m.Start = globalStart
+			m.End = globalEnd
+			cands = append(cands, m)
 		}
-		cands = append(cands, m)
 	}
 	if len(cands) == 0 {
 		return append([]byte(nil), input...), nil

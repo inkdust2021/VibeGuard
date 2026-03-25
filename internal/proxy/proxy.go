@@ -38,6 +38,7 @@ import (
 	"github.com/inkdust2021/vibeguard/internal/secretsources"
 	"github.com/inkdust2021/vibeguard/internal/session"
 	"github.com/inkdust2021/vibeguard/internal/stream"
+	"github.com/inkdust2021/vibeguard/internal/wsproxy"
 	"github.com/inkdust2021/vibeguard/internal/zstd"
 )
 
@@ -50,10 +51,11 @@ const (
 var errUnsupportedContentEncoding = errors.New("unsupported content-encoding")
 
 type runtimeConfig struct {
-	interceptMode string
-	targets       map[string]bool
-	redactEng     redact.Redactor
-	restoreEng    *restore.Engine
+	interceptMode          string
+	targets                map[string]bool
+	redactEng              redact.Redactor
+	restoreEng             *restore.Engine
+	websocketRedactionBeta bool
 }
 
 // Server represents the MITM proxy server
@@ -73,6 +75,18 @@ type Server struct {
 type auditCtx struct {
 	id       int64
 	redacted bool
+}
+
+type readWriteCloserAdapter struct {
+	io.ReadCloser
+	writer io.Writer
+}
+
+func (a *readWriteCloserAdapter) Write(p []byte) (int, error) {
+	if a == nil || a.writer == nil {
+		return 0, io.ErrClosedPipe
+	}
+	return a.writer.Write(p)
 }
 
 // NewServer creates a new proxy server
@@ -228,6 +242,32 @@ func requestHost(req *http.Request) string {
 		}
 	}
 	return canonicalHost(req.Host)
+}
+
+func isWebSocketUpgradeRequest(req *http.Request) bool {
+	if req == nil {
+		return false
+	}
+	if !headerContainsToken(req.Header, "Connection", "upgrade") {
+		return false
+	}
+	return strings.EqualFold(strings.TrimSpace(req.Header.Get("Upgrade")), "websocket")
+}
+
+func headerContainsToken(h http.Header, key, want string) bool {
+	if h == nil {
+		return false
+	}
+	value := h.Get(key)
+	if strings.TrimSpace(value) == "" {
+		return false
+	}
+	for _, part := range strings.Split(value, ",") {
+		if strings.EqualFold(strings.TrimSpace(part), want) {
+			return true
+		}
+	}
+	return false
 }
 
 func safeRequestPath(req *http.Request) string {
@@ -694,6 +734,15 @@ func (s *Server) setupHandlers() {
 			return req, nil // Pass through
 		}
 
+		// WebSocket 握手对协议头和连接升级流程更敏感，这里保持透传，
+		// 避免通用 HTTP 文本处理逻辑误改握手请求。
+		if isWebSocketUpgradeRequest(req) {
+			auditEv.Attempted = false
+			auditEv.Note = "websocket_upgrade"
+			recordAudit()
+			return req, nil
+		}
+
 		dbg := s.admin.Debug()
 		dbgOn := dbg != nil && dbg.Enabled()
 		dbgMaxBody := 0
@@ -950,6 +999,26 @@ func (s *Server) setupHandlers() {
 				ev.ResponseStatus = resp.StatusCode
 				ev.ResponseContentType = contentType
 			})
+		}
+
+		if isWebSocketUpgradeRequest(ctx.Req) && resp.StatusCode == http.StatusSwitchingProtocols {
+			if rt.websocketRedactionBeta {
+				switch rwc := any(resp.Body).(type) {
+				case io.ReadWriteCloser:
+					resp.Body = wsproxy.NewTransformConn(rwc, rt.redactEng, rt.restoreEng)
+				case interface {
+					io.ReadCloser
+					io.Writer
+				}:
+					resp.Body = wsproxy.NewTransformConn(&readWriteCloserAdapter{
+						ReadCloser: rwc,
+						writer:     rwc,
+					}, rt.redactEng, rt.restoreEng)
+				default:
+					slog.Warn("WebSocket redaction beta requested, but upgraded connection is not writable; falling back to pass-through", "host", host)
+				}
+			}
+			return resp
 		}
 
 		// Check for compression (defensive)
@@ -1505,10 +1574,11 @@ func (s *Server) applyConfig(c config.Config) {
 	}
 
 	s.runtime.Store(runtimeConfig{
-		interceptMode: interceptMode,
-		targets:       targets,
-		redactEng:     redactor,
-		restoreEng:    restore.NewEngine(s.session, prefix),
+		interceptMode:          interceptMode,
+		targets:                targets,
+		redactEng:              redactor,
+		restoreEng:             restore.NewEngine(s.session, prefix),
+		websocketRedactionBeta: c.Proxy.WebSocketRedactionBeta,
 	})
 }
 
@@ -1526,6 +1596,7 @@ func (s *Server) ReloadFromConfig() {
 	slog.Info("Config reloaded",
 		"intercept_mode", rt.interceptMode,
 		"targets", len(rt.targets),
+		"websocket_redaction_beta", rt.websocketRedactionBeta,
 		"deterministic_placeholders", c.Session.DeterministicPlaceholders,
 		"keywords", len(c.Patterns.Keywords),
 		"secret_files", len(c.Patterns.SecretFiles),
