@@ -32,6 +32,7 @@ import (
 	"github.com/inkdust2021/vibeguard/internal/pii_next/pipeline"
 	piirec "github.com/inkdust2021/vibeguard/internal/pii_next/recognizer"
 	"github.com/inkdust2021/vibeguard/internal/pii_next/rulelist"
+	"github.com/inkdust2021/vibeguard/internal/promptredact"
 	"github.com/inkdust2021/vibeguard/internal/redact"
 	"github.com/inkdust2021/vibeguard/internal/restore"
 	"github.com/inkdust2021/vibeguard/internal/rulelists"
@@ -270,6 +271,68 @@ func headerContainsToken(h http.Header, key, want string) bool {
 	return false
 }
 
+func hasWebSocketExtensionToken(h http.Header, key, want string) bool {
+	if h == nil {
+		return false
+	}
+	for _, value := range h.Values(key) {
+		for _, part := range strings.Split(value, ",") {
+			token := strings.TrimSpace(part)
+			if token == "" {
+				continue
+			}
+			base := token
+			if i := strings.IndexByte(base, ';'); i >= 0 {
+				base = base[:i]
+			}
+			if strings.EqualFold(strings.TrimSpace(base), want) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func stripWebSocketPerMessageDeflate(h http.Header) bool {
+	if h == nil {
+		return false
+	}
+	values := h.Values("Sec-WebSocket-Extensions")
+	if len(values) == 0 {
+		return false
+	}
+
+	changed := false
+	var kept []string
+	for _, value := range values {
+		for _, part := range strings.Split(value, ",") {
+			token := strings.TrimSpace(part)
+			if token == "" {
+				continue
+			}
+			base := token
+			if i := strings.IndexByte(base, ';'); i >= 0 {
+				base = base[:i]
+			}
+			if strings.EqualFold(strings.TrimSpace(base), "permessage-deflate") {
+				changed = true
+				continue
+			}
+			kept = append(kept, token)
+		}
+	}
+
+	if !changed {
+		return false
+	}
+	if len(kept) == 0 {
+		h.Del("Sec-WebSocket-Extensions")
+		return true
+	}
+	h.Set("Sec-WebSocket-Extensions", strings.Join(kept, ", "))
+	return true
+}
+
 func safeRequestPath(req *http.Request) string {
 	if req == nil || req.URL == nil {
 		return ""
@@ -355,339 +418,6 @@ func previewValue(s string, head, tail int) string {
 	return string(r[:head]) + "…" + string(r[n-tail:])
 }
 
-func redactJSONBody(redactEng redact.Redactor, body []byte) (out []byte, matches []redact.Match, changed bool, err error) {
-	// Only attempt structured redaction if the body is valid JSON; otherwise fall back to whole-text redaction upstream.
-	dec := json.NewDecoder(bytes.NewReader(body))
-	dec.UseNumber()
-
-	var v any
-	if err := dec.Decode(&v); err != nil {
-		return nil, nil, false, err
-	}
-	// Defensive: reject "valid JSON + trailing extra content" to avoid semantic changes after re-encoding.
-	if err := dec.Decode(&struct{}{}); err != io.EOF {
-		return nil, nil, false, fmt.Errorf("trailing JSON data")
-	}
-
-	// Important: do not redact all string fields across the whole JSON object.
-	// That can break fields like model/metadata/schema (and generic recognizers may misclassify timestamps/versions),
-	// causing upstream API errors or unexpected behavior. By default, only redact "prompt-like" fields:
-	// - messages[].content / messages[].content[].text
-	// - input / input[].content / input[].content[].text
-	// Note: to minimize interference with upstream protocol fields, do not process system/metadata by default.
-	redacted, matches, changed, err := redactJSONValuePromptOnly(redactEng, v)
-	if err != nil {
-		return nil, nil, false, err
-	}
-	if !changed {
-		return body, nil, false, nil
-	}
-
-	out, err = json.Marshal(redacted)
-	if err != nil {
-		return nil, nil, false, err
-	}
-	return out, matches, true, nil
-}
-
-func redactPromptJSONStringValue(redactEng redact.Redactor, s string) (out any, matches []redact.Match, changed bool, err error) {
-	// For JSON string fields: redact the raw value first, then apply JSON escaping once.
-	// This avoids treating escape sequences like `\n` as plain text and harming NER/entity recognition.
-	redactedRaw, ms := redactEng.RedactWithMatches([]byte(s))
-	if len(ms) == 0 {
-		return s, nil, false, nil
-	}
-
-	b, err := json.Marshal(string(redactedRaw))
-	if err != nil {
-		return s, nil, false, err
-	}
-
-	// Inject the already-encoded JSON string (including quotes) via RawMessage to avoid double-escaping and structural corruption.
-	raw := json.RawMessage(b)
-	if !json.Valid(raw) {
-		// Edge case: user regex/keywords may hit and break escape sequences, producing invalid JSON strings.
-		// To avoid forwarding invalid JSON upstream, fall back to "do not rewrite this field".
-		return s, nil, false, nil
-	}
-
-	return raw, ms, true, nil
-}
-
-func redactJSONValuePromptOnly(redactEng redact.Redactor, v any) (out any, matches []redact.Match, changed bool, err error) {
-	switch vv := v.(type) {
-	case []any:
-		anyChanged := false
-		var all []redact.Match
-		for i := range vv {
-			nv, ms, ch, err := redactJSONValuePromptOnly(redactEng, vv[i])
-			if err != nil {
-				return v, nil, false, err
-			}
-			if ch {
-				vv[i] = nv
-				anyChanged = true
-			}
-			if len(ms) > 0 {
-				all = append(all, ms...)
-			}
-		}
-		return vv, all, anyChanged, nil
-
-	case map[string]any:
-		anyChanged := false
-		var all []redact.Match
-		for k, val := range vv {
-			var (
-				nv any
-				ms []redact.Match
-				ch bool
-			)
-
-			switch k {
-			case "messages", "input", "contents":
-				nv, ms, ch, err = redactJSONMessagesLike(redactEng, val)
-			default:
-				nv, ms, ch, err = redactJSONValuePromptOnly(redactEng, val)
-			}
-			if err != nil {
-				return v, nil, false, err
-			}
-			if ch {
-				vv[k] = nv
-				anyChanged = true
-			}
-			if len(ms) > 0 {
-				all = append(all, ms...)
-			}
-		}
-		return vv, all, anyChanged, nil
-
-	default:
-		return v, nil, false, nil
-	}
-}
-
-func redactJSONStringLike(redactEng redact.Redactor, v any) (out any, matches []redact.Match, changed bool, err error) {
-	s, ok := v.(string)
-	if !ok {
-		return v, nil, false, nil
-	}
-	return redactPromptJSONStringValue(redactEng, s)
-}
-
-func redactJSONSystemLike(redactEng redact.Redactor, v any) (out any, matches []redact.Match, changed bool, err error) {
-	switch vv := v.(type) {
-	case string:
-		return redactPromptJSONStringValue(redactEng, vv)
-	case []any:
-		anyChanged := false
-		var all []redact.Match
-		for i := range vv {
-			nv, ms, ch, err := redactJSONTextPart(redactEng, vv[i])
-			if err != nil {
-				return v, nil, false, err
-			}
-			if ch {
-				vv[i] = nv
-				anyChanged = true
-			}
-			if len(ms) > 0 {
-				all = append(all, ms...)
-			}
-		}
-		return vv, all, anyChanged, nil
-	case map[string]any:
-		// system may also be {type,text} or other structures.
-		return redactJSONTextPart(redactEng, vv)
-	default:
-		return v, nil, false, nil
-	}
-}
-
-func redactJSONMessagesLike(redactEng redact.Redactor, v any) (out any, matches []redact.Match, changed bool, err error) {
-	switch vv := v.(type) {
-	case string:
-		// Some APIs use a plain string directly as input/prompt.
-		return redactPromptJSONStringValue(redactEng, vv)
-	case []any:
-		anyChanged := false
-		var all []redact.Match
-		for i := range vv {
-			nv, ms, ch, err := redactJSONMessageItem(redactEng, vv[i])
-			if err != nil {
-				return v, nil, false, err
-			}
-			if ch {
-				vv[i] = nv
-				anyChanged = true
-			}
-			if len(ms) > 0 {
-				all = append(all, ms...)
-			}
-		}
-		return vv, all, anyChanged, nil
-	case map[string]any:
-		// A few implementations wrap messages/input in an object.
-		return redactJSONValuePromptOnly(redactEng, vv)
-	default:
-		return v, nil, false, nil
-	}
-}
-
-func redactJSONMessageItem(redactEng redact.Redactor, v any) (out any, matches []redact.Match, changed bool, err error) {
-	switch vv := v.(type) {
-	case string:
-		return redactPromptJSONStringValue(redactEng, vv)
-	case map[string]any:
-		anyChanged := false
-		var all []redact.Match
-
-		// Common shape: role + content.
-		if c, ok := vv["content"]; ok {
-			nc, ms, ch, err := redactJSONMessageContent(redactEng, c)
-			if err != nil {
-				return v, nil, false, err
-			}
-			if ch {
-				vv["content"] = nc
-				anyChanged = true
-			}
-			if len(ms) > 0 {
-				all = append(all, ms...)
-			}
-		}
-
-		// Gemini：parts
-		if p, ok := vv["parts"]; ok {
-			np, ms, ch, err := redactJSONTextParts(redactEng, p)
-			if err != nil {
-				return v, nil, false, err
-			}
-			if ch {
-				vv["parts"] = np
-				anyChanged = true
-			}
-			if len(ms) > 0 {
-				all = append(all, ms...)
-			}
-		}
-
-		// OpenAI Responses: sometimes it is directly {type:"input_text", text:"..."}.
-		if t, ok := vv["text"]; ok {
-			nt, ms, ch, err := redactJSONStringLike(redactEng, t)
-			if err != nil {
-				return v, nil, false, err
-			}
-			if ch {
-				vv["text"] = nt
-				anyChanged = true
-			}
-			if len(ms) > 0 {
-				all = append(all, ms...)
-			}
-		}
-
-		return vv, all, anyChanged, nil
-	default:
-		return v, nil, false, nil
-	}
-}
-
-func redactJSONMessageContent(redactEng redact.Redactor, v any) (out any, matches []redact.Match, changed bool, err error) {
-	switch vv := v.(type) {
-	case string:
-		return redactPromptJSONStringValue(redactEng, vv)
-	case []any:
-		return redactJSONTextParts(redactEng, vv)
-	case map[string]any:
-		// Compatibility: content may also be {text:"..."}.
-		return redactJSONTextPart(redactEng, vv)
-	default:
-		return v, nil, false, nil
-	}
-}
-
-func redactJSONTextParts(redactEng redact.Redactor, v any) (out any, matches []redact.Match, changed bool, err error) {
-	parts, ok := v.([]any)
-	if !ok {
-		return v, nil, false, nil
-	}
-
-	anyChanged := false
-	var all []redact.Match
-	for i := range parts {
-		nv, ms, ch, err := redactJSONTextPart(redactEng, parts[i])
-		if err != nil {
-			return v, nil, false, err
-		}
-		if ch {
-			parts[i] = nv
-			anyChanged = true
-		}
-		if len(ms) > 0 {
-			all = append(all, ms...)
-		}
-	}
-	return parts, all, anyChanged, nil
-}
-
-func redactJSONTextPart(redactEng redact.Redactor, v any) (out any, matches []redact.Match, changed bool, err error) {
-	switch vv := v.(type) {
-	case string:
-		return redactPromptJSONStringValue(redactEng, vv)
-	case map[string]any:
-		// Common shape: {type:"text", text:"..."}.
-		if t, ok := vv["text"]; ok {
-			if ts, ok := t.(string); ok && isSystemReminderText(ts) {
-				// Clients like Claude Code may inject <system-reminder> into messages[].content[].
-				// These are protocol/runtime hints and should not be affected by redaction rules (do not rewrite even if matched),
-				// otherwise upstream behavior or client parsing may break.
-				return vv, nil, false, nil
-			}
-			nt, ms, ch, err := redactJSONStringLike(redactEng, t)
-			if err != nil {
-				return v, nil, false, err
-			}
-			if ch {
-				vv["text"] = nt
-			}
-			return vv, ms, ch, err
-		}
-		return v, nil, false, nil
-	default:
-		return v, nil, false, nil
-	}
-}
-
-func isSystemReminderText(s string) bool {
-	t := strings.TrimSpace(s)
-	if t == "" {
-		return false
-	}
-	// Example:
-	// <system-reminder>
-	// ...
-	// </system-reminder>
-	//
-	// Also allow extended forms like <system-reminder ...>.
-	if !strings.HasPrefix(t, "<system-reminder") {
-		return false
-	}
-	return strings.Contains(t, "</system-reminder>")
-}
-
-func jsonEscapeStringValue(s string) (string, error) {
-	b, err := json.Marshal(s)
-	if err != nil {
-		return "", err
-	}
-	if len(b) >= 2 && b[0] == '"' && b[len(b)-1] == '"' {
-		return string(b[1 : len(b)-1]), nil
-	}
-	return string(b), nil
-}
-
 // setupHandlers configures request/response handlers
 func (s *Server) setupHandlers() {
 	stats := s.admin.GetStats()
@@ -737,8 +467,13 @@ func (s *Server) setupHandlers() {
 		// WebSocket 握手对协议头和连接升级流程更敏感，这里保持透传，
 		// 避免通用 HTTP 文本处理逻辑误改握手请求。
 		if isWebSocketUpgradeRequest(req) {
+			if rt.websocketRedactionBeta && stripWebSocketPerMessageDeflate(req.Header) {
+				auditEv.Note = "websocket_upgrade_strip_permessage_deflate"
+			}
 			auditEv.Attempted = false
-			auditEv.Note = "websocket_upgrade"
+			if auditEv.Note == "" {
+				auditEv.Note = "websocket_upgrade"
+			}
 			recordAudit()
 			return req, nil
 		}
@@ -866,7 +601,7 @@ func (s *Server) setupHandlers() {
 				matches  []redact.Match
 			)
 			if strings.Contains(contentType, "application/json") {
-				if out, ms, changed, jerr := redactJSONBody(rt.redactEng, body); jerr == nil && changed {
+				if out, ms, changed, jerr := promptredact.RedactJSONBody(rt.redactEng, body); jerr == nil && changed {
 					redacted = out
 					matches = ms
 				} else if jerr == nil && !changed {
@@ -1003,6 +738,10 @@ func (s *Server) setupHandlers() {
 
 		if isWebSocketUpgradeRequest(ctx.Req) && resp.StatusCode == http.StatusSwitchingProtocols {
 			if rt.websocketRedactionBeta {
+				if hasWebSocketExtensionToken(resp.Header, "Sec-WebSocket-Extensions", "permessage-deflate") {
+					slog.Warn("WebSocket response still negotiated permessage-deflate after client-side strip; falling back to pass-through", "host", host)
+					return resp
+				}
 				switch rwc := any(resp.Body).(type) {
 				case io.ReadWriteCloser:
 					resp.Body = wsproxy.NewTransformConn(rwc, rt.redactEng, rt.restoreEng)
