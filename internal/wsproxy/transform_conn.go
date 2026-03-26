@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/binary"
+	"encoding/json"
 	"io"
 	"sync"
 	"unicode/utf8"
 
+	"github.com/inkdust2021/vibeguard/internal/promptredact"
 	"github.com/inkdust2021/vibeguard/internal/redact"
 	"github.com/inkdust2021/vibeguard/internal/restore"
 )
@@ -47,6 +49,15 @@ func NewTransformConn(conn io.ReadWriteCloser, redactor redact.Redactor, restore
 		writeState: newFrameTransformer(true, func(payload []byte) []byte {
 			if redactor == nil {
 				return append([]byte(nil), payload...)
+			}
+			if json.Valid(payload) {
+				out, _, changed, err := promptredact.RedactJSONBody(redactor, payload)
+				if err == nil {
+					if changed {
+						return out
+					}
+					return append([]byte(nil), payload...)
+				}
 			}
 			out, _ := redactor.RedactWithMatches(payload)
 			return out
