@@ -202,6 +202,7 @@ func init() {
 
 	rootCmd.AddCommand(startCmd)
 	rootCmd.AddCommand(stopCmd)
+	rootCmd.AddCommand(newUninstallCmd())
 	rootCmd.AddCommand(envCmd)
 	rootCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(claudeCmd)

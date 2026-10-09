@@ -18,6 +18,7 @@ LANG_FROM_FILE="0"
 
 INSTALL_DIR="${HOME:-}/.local/bin"
 PURGE="0"
+KEEP_CONFIG="0"
 YES="0"
 NON_INTERACTIVE="0"
 CONFIG_FILE="${VIBEGUARD_CONFIG:-${HOME:-}/.vibeguard/config.yaml}"
@@ -111,89 +112,39 @@ proxy_hostport_for_client() {
 }
 
 untrust_darwin() {
-  if ! have security; then
-    return 1
-  fi
-
-  local ca_cert="${HOME}/.vibeguard/ca.crt"
-  if [[ ! -f "${ca_cert}" ]]; then
-    return 1
-  fi
-
-  if ! have openssl; then
-    return 1
-  fi
+  local ca_cert="${1}"
+  [[ -f "${ca_cert}" ]] || return 0
+  have security && have openssl || return 1
 
   local sha256
-  sha256="$(openssl x509 -in "${ca_cert}" -noout -fingerprint -sha256 2>/dev/null | sed 's/.*=//' | tr -d ':' | tr '[:lower:]' '[:upper:]' | tr -d '[:space:]' || true)"
-  if [[ -z "${sha256}" ]]; then
-    return 1
-  fi
+  sha256="$(openssl x509 -in "${ca_cert}" -noout -fingerprint -sha256 2>/dev/null | sed 's/.*=//' | tr -d ':' | tr '[:lower:]' '[:upper:]' | tr -d '[:space:]')" || return 1
+  [[ -n "${sha256}" ]] || return 1
 
-  local login_kc=""
-  if [[ -n "${HOME:-}" ]]; then
-    if [[ -f "${HOME}/Library/Keychains/login.keychain-db" ]]; then
-      login_kc="${HOME}/Library/Keychains/login.keychain-db"
-    elif [[ -f "${HOME}/Library/Keychains/login.keychain" ]]; then
-      login_kc="${HOME}/Library/Keychains/login.keychain"
-    fi
+  local user_args=()
+  if [[ -f "${HOME}/Library/Keychains/login.keychain-db" ]]; then
+    user_args=("${HOME}/Library/Keychains/login.keychain-db")
+  elif [[ -f "${HOME}/Library/Keychains/login.keychain" ]]; then
+    user_args=("${HOME}/Library/Keychains/login.keychain")
   fi
+  local system_kc="/Library/Keychains/System.keychain"
+  local user_certs system_certs
+  user_certs="$(security find-certificate -a -Z ${user_args[@]+"${user_args[@]}"} 2>/dev/null)" || return 1
+  system_certs="$(security find-certificate -a -Z "${system_kc}" 2>/dev/null)" || return 1
 
-  local has_user="0"
-  local has_system="0"
-  if [[ -n "${login_kc}" ]]; then
-    if security find-certificate -a -Z "${login_kc}" 2>/dev/null | grep -Fq "SHA-256 hash: ${sha256}"; then
-      has_user="1"
-    fi
-  else
-    if security find-certificate -a -Z 2>/dev/null | grep -Fq "SHA-256 hash: ${sha256}"; then
-      has_user="1"
-    fi
+  if [[ "${user_certs}" == *"SHA-256 hash: ${sha256}"* ]]; then
+    security remove-trusted-cert "${ca_cert}" >/dev/null 2>&1 || return 1
+    security delete-certificate -Z "${sha256}" -t ${user_args[@]+"${user_args[@]}"} >/dev/null 2>&1 || return 1
   fi
-  if security find-certificate -a -Z "/Library/Keychains/System.keychain" 2>/dev/null | grep -Fq "SHA-256 hash: ${sha256}"; then
-    has_system="1"
+  if [[ "${system_certs}" == *"SHA-256 hash: ${sha256}"* ]]; then
+    # Noninteractive runs may use existing sudo authorization, but never prompt.
+    local sudo_args=()
+    if [[ "${NON_INTERACTIVE}" == "1" ]] || ! is_tty; then sudo_args=(-n); fi
+    sudo ${sudo_args[@]+"${sudo_args[@]}"} security remove-trusted-cert -d "${ca_cert}" >/dev/null 2>&1 || return 1
+    sudo ${sudo_args[@]+"${sudo_args[@]}"} security delete-certificate -Z "${sha256}" "${system_kc}" >/dev/null 2>&1 || return 1
   fi
-
-  if [[ "${has_user}" != "1" && "${has_system}" != "1" ]]; then
-    return 0
-  fi
-
-  # User keychain (Login Keychain)
-  if [[ "${has_user}" == "1" ]]; then
-    if [[ -n "${login_kc}" ]]; then
-      security delete-certificate -Z "${sha256}" -t "${login_kc}" >/dev/null 2>&1 || true
-    else
-      security delete-certificate -Z "${sha256}" -t >/dev/null 2>&1 || true
-    fi
-  fi
-
-  # System keychain (System.keychain / admin trust store)
-  if [[ "${has_system}" == "1" ]]; then
-    if [[ "${NON_INTERACTIVE}" == "1" ]] || ! is_tty; then
-      # Cannot prompt for sudo password interactively; leave it to the user.
-      :
-    else
-      sudo security remove-trusted-cert -d "${ca_cert}" >/dev/null 2>&1 || true
-      sudo security delete-certificate -Z "${sha256}" "/Library/Keychains/System.keychain" >/dev/null 2>&1 || true
-    fi
-  fi
-
-  # Re-check: if it still exists, consider auto removal failed.
-  local still="0"
-  if [[ -n "${login_kc}" ]]; then
-    if security find-certificate -a -Z "${login_kc}" 2>/dev/null | grep -Fq "SHA-256 hash: ${sha256}"; then
-      still="1"
-    fi
-  else
-    if security find-certificate -a -Z 2>/dev/null | grep -Fq "SHA-256 hash: ${sha256}"; then
-      still="1"
-    fi
-  fi
-  if security find-certificate -a -Z "/Library/Keychains/System.keychain" 2>/dev/null | grep -Fq "SHA-256 hash: ${sha256}"; then
-    still="1"
-  fi
-  [[ "${still}" == "1" ]] && return 1
-  return 0
+  user_certs="$(security find-certificate -a -Z ${user_args[@]+"${user_args[@]}"} 2>/dev/null)" || return 1
+  system_certs="$(security find-certificate -a -Z "${system_kc}" 2>/dev/null)" || return 1
+  [[ "${user_certs}" != *"SHA-256 hash: ${sha256}"* && "${system_certs}" != *"SHA-256 hash: ${sha256}"* ]]
 }
 
 untrust_linux() {
@@ -210,18 +161,20 @@ untrust_linux() {
   for p in "${paths[@]}"; do
     if [[ -f "${p}" ]]; then
       found="1"
-      rm -f "${p}" >/dev/null 2>&1 || sudo rm -f "${p}" >/dev/null 2>&1 || true
+      rm -f "${p}" >/dev/null 2>&1 || sudo -n rm -f "${p}" >/dev/null 2>&1 || return 1
     fi
   done
 
-  if [[ "${found}" != "1" ]]; then
+  if [[ "${found}" != "1" && ! -f "${HOME}/.vibeguard/ca.crt" && ! -f "${HOME}/.vibeguard/vibeguard-docker-ca.crt" ]]; then
     return 0
   fi
 
   if have update-ca-certificates; then
-    update-ca-certificates >/dev/null 2>&1 || sudo update-ca-certificates >/dev/null 2>&1 || true
+    update-ca-certificates >/dev/null 2>&1 || sudo -n update-ca-certificates >/dev/null 2>&1 || return 1
   elif have update-ca-trust; then
-    update-ca-trust extract >/dev/null 2>&1 || sudo update-ca-trust extract >/dev/null 2>&1 || true
+    update-ca-trust extract >/dev/null 2>&1 || sudo -n update-ca-trust extract >/dev/null 2>&1 || return 1
+  else
+    return 1
   fi
   for p in "${paths[@]}"; do
     if [[ -f "${p}" ]]; then
@@ -236,7 +189,7 @@ untrust_ca() {
   os_name="$(uname -s || true)"
   case "${os_name}" in
     Darwin)
-      untrust_darwin
+      untrust_darwin "${HOME}/.vibeguard/ca.crt" && untrust_darwin "${HOME}/.vibeguard/vibeguard-docker-ca.crt"
       ;;
     Linux)
       untrust_linux
@@ -278,7 +231,7 @@ remove_vibeguard_blocks_in_rc() {
   fi
 
   local tmp
-  tmp="$(mktemp)"
+  tmp="$(mktemp "${f}.vibeguard-clean.XXXXXX")"
 
   awk '
     BEGIN { skip=0; mode="" }
@@ -305,129 +258,147 @@ remove_vibeguard_blocks_in_rc() {
 
   if ! cmp -s "${f}" "${tmp}"; then
     backup_file "${f}"
-    mv "${tmp}" "${f}"
+    cat "${tmp}" >"${f}"
+    rm -f "${tmp}"
     echo "$(t "已清理 rc：${f}" "Updated rc: ${f}")"
   else
     rm -f "${tmp}"
   fi
 }
 
-find_vg_bin() {
-  local p=""
-
-  if [[ -n "${INSTALL_DIR:-}" && -x "${INSTALL_DIR}/vibeguard" ]]; then
-    echo "${INSTALL_DIR}/vibeguard"
-    return 0
-  fi
-
-  # type -P ignores shell functions and prefers executable paths.
-  p="$(type -P vibeguard 2>/dev/null || true)"
-  if [[ -n "${p}" && -x "${p}" ]]; then
-    echo "${p}"
-    return 0
-  fi
-
-  return 1
-}
-
-kill_vibeguard_listeners_on_port() {
-  local hostport="${1:-}"
-  local port=""
-  if [[ -z "${hostport}" ]]; then
-    hostport="127.0.0.1:28657"
-  fi
-  port="${hostport##*:}"
-  if [[ -z "${port}" ]]; then
-    return 0
-  fi
-
-  if ! have lsof; then
-    warn "未找到 lsof：无法按端口自动定位进程；可手动执行：lsof -nP -iTCP:${port} -sTCP:LISTEN" "lsof not found; cannot resolve PID by port; run: lsof -nP -iTCP:${port} -sTCP:LISTEN"
-    return 0
-  fi
-
-  # Only take PIDs whose COMMAND is vibeguard to avoid killing other processes by mistake.
-  local pids
-  pids="$(lsof -nP -iTCP:"${port}" -sTCP:LISTEN 2>/dev/null | awk 'NR>1 && $1=="vibeguard" {print $2}' | sort -u || true)"
-  if [[ -z "${pids}" ]]; then
-    # Port is still in use but not by vibeguard: warn only, do not kill automatically.
-    local other
-    other="$(lsof -nP -iTCP:"${port}" -sTCP:LISTEN 2>/dev/null | awk 'NR==1{next} {print $1" "$2; exit}' || true)"
-    if [[ -n "${other}" ]]; then
-      warn "端口 ${port} 被其他进程占用：${other}；未自动结束" "Port ${port} is used by another process: ${other}; not killed"
+stop_vibeguard_pid() {
+  local pid="${1:-}" comm
+  [[ "${pid}" =~ ^[0-9]+$ && "${pid}" -gt 1 ]] || return 0
+  [[ "${pid}" != "${VIBEGUARD_UNINSTALL_PID:-}" ]] || return 0
+  comm="$(ps -p "${pid}" -o comm= 2>/dev/null | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' || true)"
+  # A stale PID must never stop an unrelated process.
+  [[ "${comm##*/}" == "vibeguard" ]] || return 0
+  if ! kill -TERM "${pid}" 2>/dev/null; then
+    if ps -p "${pid}" -o comm= >/dev/null 2>&1; then
+      die "无法停止 VibeGuard 进程：${pid}；请检查权限" "Could not stop VibeGuard process: ${pid}; check permissions"
     fi
     return 0
   fi
-
-  local pid comm
-  for pid in ${pids}; do
-    comm="$(ps -p "${pid}" -o comm= 2>/dev/null | tr -d '[:space:]' || true)"
-    kill -TERM "${pid}" >/dev/null 2>&1 || true
-    sleep 0.3 || true
-    if kill -0 "${pid}" >/dev/null 2>&1; then
-      kill -KILL "${pid}" >/dev/null 2>&1 || true
-    fi
-    echo "$(t "已结束监听进程：PID=${pid} cmd=${comm:-unknown}" "Killed listener: PID=${pid} cmd=${comm:-unknown}")"
+  local i
+  for i in {1..20}; do
+    kill -0 "${pid}" 2>/dev/null || return 0
+    sleep 0.1
   done
+  kill -KILL "${pid}" 2>/dev/null || true
+  for i in {1..20}; do
+    kill -0 "${pid}" 2>/dev/null || return 0
+    sleep 0.1
+  done
+  die "无法停止 VibeGuard 进程：${pid}" "Could not stop VibeGuard process: ${pid}"
 }
 
 stop_proxy_best_effort() {
-  local vg=""
-  vg="$(find_vg_bin 2>/dev/null || true)"
-  if [[ -n "${vg}" ]]; then
-    "${vg}" stop >/dev/null 2>&1 || true
-  fi
-
-  # Fallback: kill via PID file (only for detached background runs without a service).
   local pid_file="${HOME}/.vibeguard/vibeguard.pid"
   if [[ -f "${pid_file}" ]]; then
-    local pid
-    pid="$(tr -d '[:space:]' <"${pid_file}" || true)"
-    if [[ "${pid}" =~ ^[0-9]+$ ]]; then
-      kill -TERM "${pid}" >/dev/null 2>&1 || true
-      sleep 0.3 || true
-      kill -KILL "${pid}" >/dev/null 2>&1 || true
-    fi
-    rm -f "${pid_file}" >/dev/null 2>&1 || true
+    stop_vibeguard_pid "$(tr -d '[:space:]' <"${pid_file}")"
+    rm -f "${pid_file}"
   fi
-
-  # Last resort: resolve the actual listener by port and kill it (vibeguard only).
-  kill_vibeguard_listeners_on_port "$(proxy_hostport_for_client)"
+  # Also find this installation's proxies when a PID file was lost and lsof is absent.
+  local pid comm exe_dir installed_dir
+  installed_dir="$(cd "${INSTALL_DIR}" 2>/dev/null && pwd -P)" || installed_dir=""
+  while read -r pid comm; do
+    [[ "${pid}" != "${VIBEGUARD_UNINSTALL_PID:-}" && "${comm##*/}" == "vibeguard" ]] || continue
+    if [[ -e "/proc/${pid}/exe" ]]; then
+      comm="$(readlink "/proc/${pid}/exe" 2>/dev/null || true)"
+    fi
+    [[ "${comm}" == /* ]] || continue
+    exe_dir="$(cd "$(dirname "${comm}")" 2>/dev/null && pwd -P)" || continue
+    [[ "${exe_dir}" == "${installed_dir}" ]] || continue
+    stop_vibeguard_pid "${pid}"
+  done < <(ps -ax -o pid= -o comm=)
+  # Foreground proxies have no PID file; only stop VibeGuard listeners.
+  have lsof || return 0
+  local hostport
+  hostport="$(proxy_hostport_for_client)"
+  for pid in $(lsof -nP -iTCP:"${hostport##*:}" -sTCP:LISTEN 2>/dev/null | awk 'NR>1 && $1=="vibeguard" {print $2}' | sort -u || true); do
+    stop_vibeguard_pid "${pid}"
+  done
 }
 
 remove_autostart_macos() {
   local label="com.vibeguard.proxy"
   local plist_path="${HOME}/Library/LaunchAgents/${label}.plist"
-  [[ -f "${plist_path}" ]] || return 0
+  if [[ ! -f "${plist_path}" ]]; then
+    have launchctl || return 0
+    local service="gui/$(id -u)/${label}"
+    launchctl print "${service}" >/dev/null 2>&1 || return 0
+    launchctl bootout "${service}" >/dev/null 2>&1 || die "无法移除 LaunchAgent" "Could not unload LaunchAgent"
+    if launchctl print "${service}" >/dev/null 2>&1; then
+      die "LaunchAgent 仍在运行" "LaunchAgent is still registered"
+    fi
+    return 0
+  fi
 
+  have launchctl || die "未找到 launchctl" "launchctl not found"
   if have launchctl; then
     local uid domain
     uid="$(id -u)"
     domain="gui/${uid}"
-    launchctl bootout "${domain}" "${plist_path}" >/dev/null 2>&1 || true
+    if ! launchctl bootout "${domain}" "${plist_path}" >/dev/null 2>&1; then
+      if launchctl print "${domain}/${label}" >/dev/null 2>&1; then
+        die "无法移除 LaunchAgent" "Could not unload LaunchAgent"
+      fi
+    fi
+    if launchctl print "${domain}/${label}" >/dev/null 2>&1; then
+      die "LaunchAgent 仍在运行" "LaunchAgent is still registered"
+    fi
   fi
 
-  rm -f "${plist_path}" >/dev/null 2>&1 || true
+  rm -f "${plist_path}"
   echo "$(t "已移除 LaunchAgent：${plist_path}" "Removed LaunchAgent: ${plist_path}")"
 }
 
 remove_autostart_linux() {
   local unit_path="${HOME}/.config/systemd/user/vibeguard.service"
-  [[ -f "${unit_path}" ]] || return 0
-
-  if have systemctl; then
-    systemctl --user disable --now vibeguard.service >/dev/null 2>&1 || true
-    systemctl --user daemon-reload >/dev/null 2>&1 || true
+  if [[ ! -f "${unit_path}" ]]; then
+    local load_state="not-found" changed="0" link
+    if have systemctl; then
+      if ! load_state="$(systemctl --user show -p LoadState --value vibeguard.service 2>/dev/null)"; then
+        local user_processes
+        user_processes="$(ps -u "$(id -u)" -o args=)" || die "无法检查用户服务进程" "Could not check user service processes"
+        if echo "${user_processes}" | grep -Eq '(^|/)systemd --user([[:space:]]|$)'; then
+          die "无法检查 systemd 服务" "Could not check systemd service"
+        fi
+        # Detached/container installs may have systemctl but no user manager.
+        load_state="not-found"
+      fi
+      if [[ "${load_state}" != "not-found" ]]; then
+        systemctl --user stop vibeguard.service >/dev/null 2>&1 || die "无法停止 systemd 服务" "Could not stop systemd service"
+        changed="1"
+      fi
+    fi
+    # A removed unit file can leave a broken enablement symlink behind.
+    for link in "${HOME}/.config/systemd/user/"*.wants/vibeguard.service; do
+      if [[ -L "${link}" ]]; then
+        rm -f "${link}"
+        changed="1"
+      fi
+    done
+    if [[ "${changed}" == "1" ]]; then
+      systemctl --user daemon-reload >/dev/null 2>&1 || die "无法重载 systemd" "Could not reload systemd"
+    fi
+    return 0
   fi
 
-  rm -f "${unit_path}" >/dev/null 2>&1 || true
+  have systemctl || die "未找到 systemctl" "systemctl not found"
+  if have systemctl; then
+    systemctl --user disable --now vibeguard.service >/dev/null 2>&1 || die "无法停止 systemd 服务" "Could not disable systemd service"
+  fi
+
+  rm -f "${unit_path}"
+  systemctl --user daemon-reload >/dev/null 2>&1 || die "无法重载 systemd" "Could not reload systemd"
   echo "$(t "已移除 systemd 用户服务：${unit_path}" "Removed systemd user service: ${unit_path}")"
 }
 
 remove_installed_binary() {
   local bin_path="${INSTALL_DIR}/vibeguard"
   if [[ -f "${bin_path}" || -L "${bin_path}" ]]; then
-    rm -f "${bin_path}" >/dev/null 2>&1 || true
+    rm -f "${bin_path}"
     echo "$(t "已删除二进制：${bin_path}" "Removed binary: ${bin_path}")"
   else
     echo "$(t "未在安装目录找到二进制：${bin_path}" "Binary not found in install dir: ${bin_path}")"
@@ -548,6 +519,8 @@ while [[ $# -gt 0 ]]; do
       DOCKER_CLEANUP="1"; shift 1;;
     --docker-volume|--docker-volumes)
       DOCKER_CLEANUP="1"; DOCKER_VOLUME_CLEANUP="1"; shift 1;;
+    --keep-config)
+      KEEP_CONFIG="1"; shift 1;;
     --purge)
       PURGE="1"; shift 1;;
     --yes)
@@ -564,6 +537,7 @@ VibeGuard 卸载脚本 / Uninstaller
   --dir DIR           安装目录 / Install dir (default: $HOME/.local/bin)
   --docker            清理 Docker 容器 vibeguard / Remove Docker container vibeguard
   --docker-volume     同时清理 Docker 数据卷 vibeguard-data（会丢失容器内配置与 CA） / Also remove vibeguard-data volume (loses config+CA)
+  --keep-config       保留 ~/.vibeguard / Keep ~/.vibeguard
   --purge             删除 ~/.vibeguard：配置/证书/日志/WAL / Remove ~/.vibeguard
   --yes               跳过确认：配合 --purge/--docker-volume / Skip confirmations: for --purge/--docker-volume
   --lang LANG         zh|en (default: auto)
@@ -627,6 +601,20 @@ if [[ "${SCRIPT_LANG_SET}" == "0" && -z "${VIBEGUARD_LANG:-}" && "${LANG_FROM_FI
   esac
 fi
 
+# Validate all destructive choices before removing anything.
+[[ "${PURGE}" != "1" || "${KEEP_CONFIG}" != "1" ]] || die "--purge 与 --keep-config 不能同时使用" "--purge and --keep-config cannot be used together"
+if [[ "${PURGE}" == "1" && "${YES}" != "1" ]]; then
+  if [[ "${NON_INTERACTIVE}" == "1" ]] || ! is_tty; then
+    die "删除配置需要 --purge --yes" "Deleting configuration requires --purge --yes"
+  fi
+  read -r -p "$(t "删除配置、证书私钥、日志和 WAL？[y/N]: " "Delete configuration, CA private key, logs and WAL? [y/N]: ")" ans
+  [[ "${ans}" == "y" || "${ans}" == "Y" ]] || exit 1
+  YES="1"
+fi
+if [[ "${DOCKER_CLEANUP}" == "1" && "${YES}" != "1" && "${NON_INTERACTIVE}" == "1" ]]; then
+  die "Docker 清理需要 --yes" "Docker cleanup requires --yes"
+fi
+
 say "开始卸载" "Starting uninstall"
 say "安装目录：${INSTALL_DIR}" "Install dir: ${INSTALL_DIR}"
 
@@ -644,10 +632,9 @@ stop_proxy_best_effort
 say "清理 Docker（可选）" "Cleaning Docker (optional)"
 cleanup_docker_best_effort
 
-untrust_ok="1"
 say "移除信任证书" "Removing trusted CA"
 if ! untrust_ca; then
-  untrust_ok="0"
+  die "无法确认 CA 信任已移除；保留程序和配置以便重试。请检查权限。" "Could not remove or verify CA trust; binary and configuration preserved for retry. Check permissions."
 fi
 
 say "清理 shell rc" "Cleaning shell rc"
@@ -672,7 +659,3 @@ else
 fi
 
 say "卸载完成" "Uninstall complete"
-if [[ "${untrust_ok}" != "1" ]]; then
-  echo ""
-  echo "$(t "提示：如果你曾运行 vibeguard trust 安装系统证书，请在系统钥匙串/信任库中手动移除 “VibeGuard CA”。" "Note: If you installed the CA via vibeguard trust, remove \"VibeGuard CA\" from your system trust store manually if needed.")"
-fi

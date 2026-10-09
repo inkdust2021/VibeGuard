@@ -15,6 +15,8 @@ param(
   [ValidateSet("auto", "zh", "en")]
   [string]$Language = "auto",
   [switch]$Purge,
+  [switch]$KeepConfig,
+  [int]$CallerPID = 0,
   [switch]$Yes,
   [switch]$RemovePath,
   [switch]$NonInteractive
@@ -133,7 +135,7 @@ function RemoveProfileHelper([string]$ProfilePath) {
   if (-not (Test-Path -LiteralPath "$ProfilePath")) { return $false }
 
   $text = $null
-  try { $text = Get-Content -LiteralPath "$ProfilePath" -Raw -ErrorAction Stop } catch { return $false }
+  $text = Get-Content -LiteralPath "$ProfilePath" -Raw -ErrorAction Stop
   if ($null -eq $text -or $text -notmatch '# VibeGuard SHELL') { return $false }
 
   # Remove the block from marker to the end of the function (matches what install.ps1 injects).
@@ -153,58 +155,45 @@ function RemoveProfileHelper([string]$ProfilePath) {
   return $true
 }
 
-function FindVibeGuardExe([string]$Dir) {
-  $candidate = Join-Path "$Dir" "vibeguard.exe"
-  if (Test-Path -LiteralPath "$candidate") { return $candidate }
-  $cmd = Get-Command "vibeguard" -ErrorAction SilentlyContinue
-  if ($null -ne $cmd -and -not [string]::IsNullOrWhiteSpace($cmd.Path)) { return $cmd.Path }
-  return $null
+function StopVibeGuardProcess([int]$ProcessID, [string]$VgPath) {
+  if ($ProcessID -le 1 -or $ProcessID -eq $CallerPID) { return }
+  $proc = Get-Process -Id $ProcessID -ErrorAction SilentlyContinue
+  if ($null -eq $proc) { return }
+  if ([string]::IsNullOrWhiteSpace($proc.Path)) { throw "Cannot identify process $ProcessID; leaving it untouched" }
+  if (-not $proc.Path.Equals($VgPath, [StringComparison]::OrdinalIgnoreCase)) { return }
+  Stop-Process -Id $ProcessID -Force -ErrorAction Stop
+  if (-not $proc.HasExited) { $proc.WaitForExit(5000) | Out-Null }
+  if (-not $proc.HasExited) { throw "Could not stop VibeGuard process $ProcessID" }
 }
 
 function TryStopProxy([string]$VgPath, [string]$ConfigDir) {
-  # Prefer CLI stop first (it already contains multiple strategies: schtasks/launchctl/systemctl/pid).
-  if (-not [string]::IsNullOrWhiteSpace($VgPath) -and (Test-Path -LiteralPath "$VgPath")) {
-    try { & "$VgPath" "stop" | Out-Null } catch { }
-  }
-
-  # Fallback: try ending the scheduled task.
-  if ($null -ne (Get-Command "schtasks" -ErrorAction SilentlyContinue)) {
-    try { & schtasks /End /TN "VibeGuard" 2>$null | Out-Null } catch { }
-  }
-
-  # Fallback: kill via PID file.
   $pidFile = Join-Path "$ConfigDir" "vibeguard.pid"
-  if (Test-Path -LiteralPath "$pidFile") {
-    try {
-      $pidText = (Get-Content -LiteralPath "$pidFile" -ErrorAction Stop | Select-Object -First 1).Trim()
-      $pid = 0
-      if ([int]::TryParse($pidText, [ref]$pid) -and $pid -gt 0) {
-        try { Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue } catch { }
-      }
-    } catch { }
-    try { Remove-Item -Force -LiteralPath "$pidFile" -ErrorAction SilentlyContinue | Out-Null } catch { }
+  if (Test-Path -LiteralPath $pidFile) {
+    $processID = 0
+    $pidText = (Get-Content -LiteralPath $pidFile -Raw).Trim()
+    if ([int]::TryParse($pidText, [ref]$processID)) { StopVibeGuardProcess $processID $VgPath }
+    Remove-Item -Force -LiteralPath $pidFile
+  }
+  # Covers foreground proxies and the registry Run fallback, without killing other installs.
+  Get-Process -Name vibeguard -ErrorAction SilentlyContinue | ForEach-Object {
+    StopVibeGuardProcess $_.Id $VgPath
   }
 }
 
 function RemoveAutostart() {
-  # Scheduled task (install.ps1 uses fixed task name: VibeGuard).
-  if ($null -ne (Get-Command "Unregister-ScheduledTask" -ErrorAction SilentlyContinue)) {
-    try {
-      Unregister-ScheduledTask -TaskName "VibeGuard" -Confirm:$false -ErrorAction Stop | Out-Null
-      Say "已删除计划任务：VibeGuard" "Removed scheduled task: VibeGuard"
-    } catch { }
-  } elseif ($null -ne (Get-Command "schtasks" -ErrorAction SilentlyContinue)) {
-    try { & schtasks /Delete /F /TN "VibeGuard" 2>$null | Out-Null; Say "已删除计划任务：VibeGuard" "Removed scheduled task: VibeGuard" } catch { }
+  # Query/delete errors must propagate; a missing task is the only benign case.
+  $task = @(Get-ScheduledTask -ErrorAction Stop | Where-Object { $_.TaskName -eq 'VibeGuard' -and $_.TaskPath -eq '\' })
+  foreach ($item in $task) {
+    if ($item.State -eq 'Running') { Stop-ScheduledTask -InputObject $item -ErrorAction Stop }
+    Unregister-ScheduledTask -InputObject $item -Confirm:$false -ErrorAction Stop
   }
-
-  # HKCU Run fallback (install.ps1 may fall back to this).
-  $runKey = "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"
-  try {
-    if (Get-ItemProperty -Path "$runKey" -Name "VibeGuard" -ErrorAction SilentlyContinue) {
-      Remove-ItemProperty -Path "$runKey" -Name "VibeGuard" -ErrorAction SilentlyContinue | Out-Null
-      Say "已移除开机启动项（HKCU Run）：VibeGuard" "Removed autorun (HKCU Run): VibeGuard"
+  $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+  if (Test-Path $runKey) {
+    $entry = Get-ItemProperty -Path $runKey -ErrorAction Stop
+    if ($entry.PSObject.Properties['VibeGuard']) {
+      Remove-ItemProperty -Path $runKey -Name VibeGuard -ErrorAction Stop
     }
-  } catch { }
+  }
 }
 
 function GetListenFromConfig([string]$Path) {
@@ -264,7 +253,8 @@ function RemoveUserPathEntry([string]$Dir) {
   $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
   if ([string]::IsNullOrWhiteSpace($userPath)) { return $false }
   $parts = $userPath -split ';' | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }
-  $newParts = $parts | Where-Object { -not $_.Equals($Dir, [System.StringComparison]::OrdinalIgnoreCase) }
+  $parts = @($parts)
+  $newParts = @($parts | Where-Object { -not $_.Equals($Dir, [System.StringComparison]::OrdinalIgnoreCase) })
   if ($newParts.Count -eq $parts.Count) { return $false }
   $newUserPath = ($newParts -join ';')
   [Environment]::SetEnvironmentVariable("Path", $newUserPath, "User")
@@ -290,107 +280,117 @@ function PurgeConfigDir([string]$ConfigDir) {
       return
     }
   }
-  Remove-Item -Recurse -Force -LiteralPath "$ConfigDir" -ErrorAction SilentlyContinue | Out-Null
+  Remove-Item -Recurse -Force -LiteralPath "$ConfigDir" -ErrorAction Stop | Out-Null
   Say ("已删除配置目录：$ConfigDir") ("Removed config dir: $ConfigDir")
 }
 
 function GetCAThumbprintFromFile([string]$CertPath) {
-  if ([string]::IsNullOrWhiteSpace($CertPath)) { return $null }
-  if (-not (Test-Path -LiteralPath "$CertPath")) { return $null }
-  $certutil = Get-Command "certutil" -ErrorAction SilentlyContinue
-  if ($null -eq $certutil) { return $null }
-  try {
-    $lines = & certutil -dump "$CertPath" 2>$null
-    $text = $lines | Out-String
-    if ($text -match '(?im)^\s*Cert Hash\(sha1\):\s*([0-9a-f ]+)\s*$') {
-      return (($Matches[1] -replace '\s+', '').ToUpperInvariant())
-    }
-  } catch { }
-  return $null
+  if (-not (Test-Path -LiteralPath $CertPath)) { return $null }
+  # Native X509 avoids locale-dependent certutil output parsing.
+  $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($CertPath)
+  try { return $cert.Thumbprint } finally { $cert.Dispose() }
 }
 
 function RemoveCertByThumbprint([string]$StorePath, [string]$Thumbprint) {
-  if ([string]::IsNullOrWhiteSpace($StorePath) -or [string]::IsNullOrWhiteSpace($Thumbprint)) { return $false }
-  try {
-    $items = Get-ChildItem -Path "$StorePath" -ErrorAction Stop | Where-Object { $_.Thumbprint -eq $Thumbprint }
-    if ($null -eq $items) { return $false }
-    foreach ($c in @($items)) {
-      try { Remove-Item -Path (Join-Path "$StorePath" $c.Thumbprint) -Force -ErrorAction SilentlyContinue | Out-Null } catch { }
-    }
-    return $true
-  } catch { }
-  return $false
+  $items = @(Get-ChildItem -Path $StorePath -ErrorAction Stop | Where-Object { $_.Thumbprint -eq $Thumbprint })
+  foreach ($cert in $items) {
+    Remove-Item -LiteralPath (Join-Path $StorePath $cert.Thumbprint) -Force -ErrorAction Stop
+  }
 }
 
 function IsThumbprintInStore([string]$StorePath, [string]$Thumbprint) {
-  if ([string]::IsNullOrWhiteSpace($StorePath) -or [string]::IsNullOrWhiteSpace($Thumbprint)) { return $false }
-  try {
-    $items = Get-ChildItem -Path "$StorePath" -ErrorAction Stop | Where-Object { $_.Thumbprint -eq $Thumbprint }
-    return ($null -ne $items -and @($items).Count -gt 0)
-  } catch { }
-  return $false
+  $items = @(Get-ChildItem -Path $StorePath -ErrorAction Stop | Where-Object { $_.Thumbprint -eq $Thumbprint })
+  return $items.Count -gt 0
 }
 
 function TryUntrustCA([string]$ConfigDir) {
-  $caPath = Join-Path "$ConfigDir" "ca.crt"
-  $thumb = GetCAThumbprintFromFile "$caPath"
-  if ([string]::IsNullOrWhiteSpace($thumb)) {
-    return $false
-  }
-  $thumb = $thumb.ToUpperInvariant()
-
-  $hasUser = IsThumbprintInStore "Cert:\\CurrentUser\\Root" "$thumb"
-  $hasSystem = IsThumbprintInStore "Cert:\\LocalMachine\\Root" "$thumb"
-  if (-not $hasUser -and -not $hasSystem) {
-    return $true
-  }
-
-  if ($hasUser) {
-    if (RemoveCertByThumbprint "Cert:\\CurrentUser\\Root" "$thumb") {
-      Say "已从当前用户信任库移除 VibeGuard CA" "Removed VibeGuard CA from CurrentUser trust store"
+  foreach ($name in @('ca.crt', 'vibeguard-docker-ca.crt')) {
+    $caPath = Join-Path $ConfigDir $name
+    if (-not (Test-Path -LiteralPath $caPath)) { continue }
+    $thumb = GetCAThumbprintFromFile $caPath
+    if ([string]::IsNullOrWhiteSpace($thumb)) { return $false }
+    foreach ($store in @('Cert:\CurrentUser\Root', 'Cert:\LocalMachine\Root')) {
+      if (IsThumbprintInStore $store $thumb) { RemoveCertByThumbprint $store $thumb }
+      if (IsThumbprintInStore $store $thumb) { return $false }
     }
   }
+  return $true
+}
 
-  if ($hasSystem) {
-    if (RemoveCertByThumbprint "Cert:\\LocalMachine\\Root" "$thumb") {
-      Say "已从系统信任库移除 VibeGuard CA" "Removed VibeGuard CA from system trust store"
-    }
+function NewBinaryRemovalScript([string]$BinaryPath, [int]$ParentID, [string]$ResultPath) {
+  $binLiteral = $BinaryPath.Replace("'", "''")
+  $resultLiteral = $ResultPath.Replace("'", "''")
+  return @"
+`$ErrorActionPreference = 'Stop'
+try {
+  Set-Content -LiteralPath '$resultLiteral' -Value 'waiting for CLI exit'
+  `$parent = if ($ParentID -gt 0) { Get-Process -Id $ParentID -ErrorAction SilentlyContinue } else { `$null }
+  if (`$null -ne `$parent -and -not `$parent.WaitForExit(30000)) { throw 'CLI did not exit within 30 seconds' }
+  for (`$i = 0; `$i -lt 30; `$i++) {
+    if (-not (Test-Path -LiteralPath '$binLiteral')) { break }
+    try { Remove-Item -LiteralPath '$binLiteral' -Force -ErrorAction Stop } catch { Start-Sleep -Milliseconds 100 }
   }
+  if (Test-Path -LiteralPath '$binLiteral') { throw 'Could not delete executable' }
+  Set-Content -LiteralPath '$resultLiteral' -Value 'complete'
+} catch {
+  Set-Content -LiteralPath '$resultLiteral' -Value ('failed: ' + `$_.Exception.Message)
+  exit 1
+}
+"@
+}
 
-  $stillUser = IsThumbprintInStore "Cert:\\CurrentUser\\Root" "$thumb"
-  $stillSystem = IsThumbprintInStore "Cert:\\LocalMachine\\Root" "$thumb"
-  if (-not $stillUser -and -not $stillSystem) { return $true }
-  return $false
+function RemoveInstalledBinary([string]$BinaryPath) {
+  if (-not (Test-Path -LiteralPath $BinaryPath)) { return $null }
+  $caller = if ($CallerPID -gt 0) { Get-Process -Id $CallerPID -ErrorAction Stop } else { $null }
+  if ($null -eq $caller -or -not $caller.Path.Equals($BinaryPath, [StringComparison]::OrdinalIgnoreCase)) {
+    Remove-Item -Force -LiteralPath $BinaryPath -ErrorAction Stop
+    return $null
+  }
+  # Windows locks the running executable. A detached worker deletes it after CLI exit.
+  $result = Join-Path ([IO.Path]::GetTempPath()) ('vibeguard-uninstall-' + [Guid]::NewGuid().ToString('N') + '.txt')
+  $code = NewBinaryRemovalScript $BinaryPath $CallerPID $result
+  $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($code))
+  $worker = Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', $encoded) -WindowStyle Hidden -PassThru
+  for ($i = 0; $i -lt 100 -and -not (Test-Path -LiteralPath $result); $i++) {
+    if ($worker.HasExited) { throw 'Binary removal worker exited before starting' }
+    Start-Sleep -Milliseconds 100
+  }
+  if (-not (Test-Path -LiteralPath $result)) { throw 'Binary removal worker did not start' }
+  return $result
 }
 
 $configDir = Join-Path $HOME ".vibeguard"
-$configFile = Join-Path "$configDir" "config.yaml"
+$configFile = if ($env:VIBEGUARD_CONFIG) { $env:VIBEGUARD_CONFIG } else { Join-Path "$configDir" "config.yaml" }
+
+# Check deletion decisions before stopping services or touching files.
+if ($Purge -and $KeepConfig) { throw "-Purge and -KeepConfig cannot be used together" }
+if ($Purge -and -not $Yes) {
+  if ($NonInteractive -or [Console]::IsInputRedirected) { throw "Deleting configuration requires -Purge -Yes" }
+  $answer = Read-Host (T "删除配置、证书私钥、日志和 WAL？[y/N]" "Delete configuration, CA private key, logs and WAL? [y/N]")
+  if ($answer -notmatch '^(?i:y|yes)$') { throw "Uninstall cancelled" }
+  $Yes = $true
+}
 
 Say "开始卸载" "Starting uninstall"
 Say ("安装目录：$InstallDir") ("Install dir: $InstallDir")
 
-$vg = FindVibeGuardExe "$InstallDir"
 Say "停止后台代理" "Stopping proxy"
-TryStopProxy "$vg" "$configDir"
-
-Say "移除开机自启" "Removing autostart"
 RemoveAutostart
+TryStopProxy (Join-Path $InstallDir "vibeguard.exe") "$configDir"
 
-$untrustOk = $true
 Say "移除信任证书" "Removing trusted CA"
-try { $untrustOk = TryUntrustCA "$configDir" } catch { $untrustOk = $false }
+if (-not (TryUntrustCA "$configDir")) { throw "CA trust remains; binary and configuration preserved for retry" }
 
 Say "清理 PowerShell Profile" "Cleaning PowerShell profile"
 $profilePath = GetProfilePath
-try { RemoveProfileHelper "$profilePath" | Out-Null } catch { }
-
-Say "删除二进制" "Removing binary"
-$bin = Join-Path "$InstallDir" "vibeguard.exe"
-if (Test-Path -LiteralPath "$bin") {
-  try { Remove-Item -Force -LiteralPath "$bin" -ErrorAction Stop | Out-Null; Say ("已删除：$bin") ("Removed: $bin") } catch { Warn ("删除失败：$($_.Exception.Message)") ("Failed to remove: $($_.Exception.Message)") }
-} else {
-  Say ("未在安装目录找到：$bin") ("Not found in install dir: $bin")
+$documents = [Environment]::GetFolderPath('MyDocuments')
+$profiles = @($profilePath)
+if (-not [string]::IsNullOrWhiteSpace($documents)) {
+  $profiles += Join-Path $documents 'WindowsPowerShell\profile.ps1'
+  $profiles += Join-Path $documents 'PowerShell\profile.ps1'
 }
+$profiles | Select-Object -Unique | ForEach-Object { RemoveProfileHelper $_ | Out-Null }
+
 
 Say "清理代理环境变量（仅在值匹配 VibeGuard 时）" "Cleaning proxy env vars (only if values match VibeGuard)"
 $listen = GetListenFromConfig "$configFile"
@@ -417,8 +417,10 @@ if ($Purge) {
   Say ("保留配置目录：$configDir（可用 -Purge 删除）") ("Keeping config dir: $configDir (use -Purge to remove)")
 }
 
-Say "卸载完成" "Uninstall complete"
-if (-not $untrustOk) {
-  Write-Host ""
-  Write-Host (T "提示：如果你曾运行 vibeguard trust 安装系统证书，请在证书管理器中手动移除 “VibeGuard CA”。" "Note: If you installed the CA via vibeguard trust, remove \"VibeGuard CA\" from the trust store manually if needed.")
+Say "删除二进制" "Removing binary"
+$resultPath = RemoveInstalledBinary (Join-Path $InstallDir 'vibeguard.exe')
+if ($resultPath) {
+  Say ("清理完成，程序将在命令退出后删除；最终结果：$resultPath") ("Cleanup finished; executable deletion pending CLI exit. Final result: $resultPath")
+} else {
+  Say "卸载完成" "Uninstall complete"
 }

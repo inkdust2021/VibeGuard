@@ -94,25 +94,40 @@ flowchart LR
 
 ## Uninstall
 
-macOS/Linux:
+The installed binary includes the uninstaller and works offline on macOS, Linux and Windows:
+
+```bash
+vibeguard uninstall
+```
+
+Before changing anything, it asks whether to keep configuration, CA private keys, logs and WAL. Answer `y` to keep them or `n` to delete them. For explicit or noninteractive use:
+
+```bash
+vibeguard uninstall --keep-config --non-interactive
+vibeguard uninstall --purge --yes --non-interactive
+```
+
+`--yes` alone does not choose for you. `--dir PATH` selects the installation directory; by default it uses the running executable's directory. Windows also supports `--remove-path` to remove that directory from user PATH; use it only when the directory is dedicated to VibeGuard.
+
+Uninstall stops the proxy, removes autostart, removes CA trust and installer shell/profile helpers, and deletes the binary. `--purge` deletes `~/.vibeguard`, including configuration, CA/private keys, logs/backups, session WAL and audit data. Project `.vibeguard.yaml`, custom files outside that directory, exported/downloaded certificates, shared installation directories and shell/profile safety backups remain user-owned. Restart your terminal to discard environment values/functions already loaded in the parent shell.
+
+Cleanup failures return an error. If CA trust cannot be removed or verified, the binary and CA/configuration are preserved for retry. System trust removal may require administrator privileges (on macOS/Linux, run `sudo -v` before noninteractive removal). On Windows the running executable is deleted by a worker after the command exits: the printed temporary result file reports `complete` or `failed: ...`; check it before considering uninstall complete, then delete the result file if desired.
+
+For older installations, the standalone scripts are still available (they retain configuration unless purge is selected):
 
 ```bash
 curl -fsSL https://vibeguard.top/uninstall | bash
-curl -fsSL https://vibeguard.top/uninstall | bash -s -- --purge
-curl -fsSL https://vibeguard.top/uninstall | bash -s -- --docker
-curl -fsSL https://vibeguard.top/uninstall | bash -s -- --docker --docker-volume
+curl -fsSL https://vibeguard.top/uninstall | bash -s -- --purge --yes
+# Docker-only installations: remove the container and optionally its data volume.
+curl -fsSL https://vibeguard.top/uninstall | bash -s -- --docker --docker-volume --yes
 ```
 
-Note: `--docker-volume` removes the `vibeguard-data` Docker volume (container config + CA will be lost).
-
-Windows (PowerShell):
+`--docker-volume` removes `vibeguard-data` (container configuration and CA). Run the host script for Docker-only installations; the CLI inside the container cannot uninstall host helpers.
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -Command "& ([ScriptBlock]::Create((irm https://vibeguard.top/uninstall.ps1)))"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "& ([ScriptBlock]::Create((irm https://vibeguard.top/uninstall.ps1))) -Purge"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "& ([ScriptBlock]::Create((irm https://vibeguard.top/uninstall.ps1))) -KeepConfig"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "& ([ScriptBlock]::Create((irm https://vibeguard.top/uninstall.ps1))) -Purge -Yes"
 ```
-
-The uninstallers try to remove the trusted CA (“VibeGuard CA”) automatically. If it fails (e.g., permissions), remove it manually.
 
 ## Configuration
 
