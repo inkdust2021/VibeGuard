@@ -9,20 +9,24 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"sort"
 	"sync"
 	"time"
 )
 
 // Manager handles session mapping state
 type Manager struct {
-	forward  map[string]string // placeholder -> original
-	reverse  map[string]string // original -> placeholder
-	mu       sync.RWMutex
-	ttl      time.Duration
-	maxSize  int
-	created  map[string]time.Time // placeholder -> creation time
-	stopChan chan struct{}
-	wal      *WAL
+	forward            map[string]string // placeholder -> original
+	reverse            map[string]string // original -> placeholder
+	mu                 sync.RWMutex
+	ttl                time.Duration
+	maxSize            int
+	created            map[string]time.Time // placeholder -> creation time
+	stopChan           chan struct{}
+	wal                *WAL
+	walCleanupEnabled  bool
+	walCleanupInterval time.Duration
+	lastWALCleanup     time.Time
 	// randomSecret is a random key generated on process start (default mode: stable within this process only).
 	// deterministicSecret is the key used in "deterministic placeholders" mode (typically derived from the CA private key).
 	// Notes:
@@ -71,10 +75,10 @@ func (m *Manager) register(placeholder, original string, createdAt time.Time, ap
 	}
 
 	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	// Check if already exists
 	if _, exists := m.reverse[original]; exists {
-		m.mu.Unlock()
 		return
 	}
 
@@ -87,7 +91,6 @@ func (m *Manager) register(placeholder, original string, createdAt time.Time, ap
 	m.reverse[original] = placeholder
 	m.created[placeholder] = createdAt
 	wal := m.wal
-	m.mu.Unlock()
 
 	if appendToWAL && wal != nil {
 		if err := wal.Append(WALEntry{
@@ -193,11 +196,11 @@ func (m *Manager) Size() int {
 // Clear removes all mappings
 func (m *Manager) Clear() {
 	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.forward = make(map[string]string)
 	m.reverse = make(map[string]string)
 	m.created = make(map[string]time.Time)
 	wal := m.wal
-	m.mu.Unlock()
 
 	if wal != nil {
 		if err := wal.Delete(); err != nil && !os.IsNotExist(err) {
@@ -236,6 +239,50 @@ func (m *Manager) AttachWAL(wal *WAL) {
 	if old != nil && old != wal {
 		_ = old.Close()
 	}
+}
+
+// ConfigureWALCleanup changes the disk cleanup policy; mapping TTL cleanup stays enabled.
+func (m *Manager) ConfigureWALCleanup(enabled bool, interval time.Duration) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.walCleanupEnabled != enabled || m.walCleanupInterval != interval {
+		m.lastWALCleanup = time.Now()
+	}
+	m.walCleanupEnabled = enabled
+	m.walCleanupInterval = interval
+}
+
+// CompactWAL snapshots only live mappings, including their original creation times.
+func (m *Manager) CompactWAL() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.compactWALLocked(time.Now())
+}
+
+func (m *Manager) compactWALLocked(now time.Time) error {
+	if m.wal == nil {
+		return nil
+	}
+	entries := make([]WALEntry, 0, len(m.forward))
+	for placeholder, original := range m.forward {
+		created := m.created[placeholder]
+		if now.Sub(created) > m.ttl {
+			continue
+		}
+		entries = append(entries, WALEntry{Placeholder: placeholder, Original: original, CreatedAt: created})
+	}
+	// Restore registers oldest first so reducing max_mappings retains the newest entries.
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].CreatedAt.Equal(entries[j].CreatedAt) {
+			return entries[i].Placeholder < entries[j].Placeholder
+		}
+		return entries[i].CreatedAt.Before(entries[j].CreatedAt)
+	})
+	if err := m.wal.Replace(entries); err != nil {
+		return err
+	}
+	m.lastWALCleanup = now
+	return nil
 }
 
 // MappingInfo represents a mapping entry for listing (without original value)
@@ -306,6 +353,11 @@ func (m *Manager) cleanup() {
 
 	if expired > 0 {
 		slog.Debug("Cleaned up expired mappings", "count", expired)
+	}
+	if m.walCleanupEnabled && m.walCleanupInterval > 0 && now.Sub(m.lastWALCleanup) >= m.walCleanupInterval {
+		if err := m.compactWALLocked(now); err != nil {
+			slog.Warn("Failed to compact session WAL", "error", err)
+		}
 	}
 }
 

@@ -79,3 +79,7 @@ patterns:
 go test ./...
 go test ./internal/pii_next/...
 ```
+
+## Automatic Cleanup
+
+See [automatic cleanup settings](AUTO_CLEANUP.md) for runtime log rotation and encrypted session WAL compaction, including independent switches, intervals, defaults, and project overrides.

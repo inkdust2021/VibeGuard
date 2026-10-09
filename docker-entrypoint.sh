@@ -24,6 +24,16 @@ log:
   level: info
   redact_log: true
 
+cleanup:
+  log:
+    enabled: true
+    interval: 24h
+    max_size_mb: 10
+    max_backups: 3
+  session_wal:
+    enabled: true
+    interval: 1h
+
 targets:
   - host: api.anthropic.com
     enabled: true

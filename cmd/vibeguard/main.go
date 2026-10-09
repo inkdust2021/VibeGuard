@@ -885,9 +885,11 @@ func runProxy(cmd *cobra.Command, args []string) error {
 	}
 
 	// Setup logging
-	if err := log.Setup(c.Log.File, c.Log.Level); err != nil {
+	logWriter, err := log.SetupWithCleanup(c.Log.File, c.Log.Level, c.Cleanup)
+	if err != nil {
 		return fmt.Errorf("failed to setup logging: %w", err)
 	}
+	defer logWriter.Close()
 
 	// Record PID so `vibeguard stop` can locate and stop the background process.
 	pid := os.Getpid()
@@ -931,7 +933,10 @@ func runProxy(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create proxy: %w", err)
 	}
 	// Enable config hot-reload: changes from the admin UI take effect without restart.
-	if err := cfg.Watch(srv.ReloadFromConfig); err != nil {
+	if err := cfg.Watch(func() {
+		logWriter.UpdateCleanup(cfg.Get().Cleanup.Log)
+		srv.ReloadFromConfig()
+	}); err != nil {
 		slog.Warn("Failed to enable config hot-reload; restart may be required after config changes", "error", err)
 	}
 
@@ -1032,6 +1037,16 @@ log:
   file: %s
   level: info
 
+cleanup:
+  log:
+    enabled: true
+    interval: 24h
+    max_size_mb: 10
+    max_backups: 3
+  session_wal:
+    enabled: true
+    interval: 1h
+
 	# Target hosts to intercept (AI API endpoints)
 	targets:
   - host: api.anthropic.com
@@ -1068,6 +1083,16 @@ session:
 log:
   file: %s
   level: info
+
+cleanup:
+  log:
+    enabled: true
+    interval: 24h
+    max_size_mb: 10
+    max_backups: 3
+  session_wal:
+    enabled: true
+    interval: 1h
 
 # Target hosts to intercept (AI API endpoints)
 targets:

@@ -92,6 +92,14 @@ func (a *Admin) handleLogsStream(w http.ResponseWriter, r *http.Request) {
 		return true
 	}
 
+	// Capture the initial file identity and offset before sending the snapshot.
+	var pos int64
+	var previous os.FileInfo
+	if st, err := os.Stat(effective); err == nil {
+		previous = st
+		pos = st.Size()
+	}
+
 	// Initial tail.
 	lines, err := tailFileLines(effective, tail)
 	if err != nil {
@@ -107,10 +115,6 @@ func (a *Admin) handleLogsStream(w http.ResponseWriter, r *http.Request) {
 	})
 
 	// Follow mode: read newly appended content from the end of the file.
-	var pos int64 = 0
-	if st, err := os.Stat(effective); err == nil {
-		pos = st.Size()
-	}
 	var carry []byte
 
 	ticker := time.NewTicker(1 * time.Second)
@@ -127,11 +131,12 @@ func (a *Admin) handleLogsStream(w http.ResponseWriter, r *http.Request) {
 			}
 
 			size := st.Size()
-			if size < pos {
+			if size < pos || (previous != nil && !os.SameFile(previous, st)) {
 				// File truncated/rotated: restart from the beginning.
 				pos = 0
 				carry = carry[:0]
 			}
+			previous = st
 			if size == pos {
 				continue
 			}

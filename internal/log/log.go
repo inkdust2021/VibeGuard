@@ -6,63 +6,36 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/inkdust2021/vibeguard/internal/config"
 )
 
-// Setup initializes the logger with file output
+// Setup initializes the logger with file output and default cleanup.
 func Setup(logPath string, level string) error {
-	logPath = ExpandPath(logPath)
-
-	// Ensure log directory exists
-	logDir := filepath.Dir(logPath)
-	if err := os.MkdirAll(logDir, 0755); err != nil {
-		return err
-	}
-
-	// Open log file
-	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		return err
-	}
-
-	// Parse log level
-	var slogLevel slog.Level
-	switch level {
-	case "debug":
-		slogLevel = slog.LevelDebug
-	case "info":
-		slogLevel = slog.LevelInfo
-	case "warn":
-		slogLevel = slog.LevelWarn
-	case "error":
-		slogLevel = slog.LevelError
-	default:
-		slogLevel = slog.LevelInfo
-	}
-
-	// Create handler that writes to both stderr and file
-	handler := slog.NewTextHandler(io.MultiWriter(os.Stderr, logFile), &slog.HandlerOptions{
-		Level: slogLevel,
-	})
-
-	slog.SetDefault(slog.New(handler))
-	return nil
+	_, err := SetupWithCleanup(logPath, level, config.NewManager().Get().Cleanup)
+	return err
 }
 
-// SetFileOnly switches to file-only logging (no stderr)
+// SetupWithCleanup returns the file writer so runtime policy changes and shutdown can be managed.
+func SetupWithCleanup(logPath, level string, cleanup config.CleanupConfig) (*fileWriter, error) {
+	return setup(logPath, level, true, cleanup.Log)
+}
+
+// SetFileOnly switches to file-only logging (no stderr).
 func SetFileOnly(logPath string, level string) error {
-	logPath = ExpandPath(logPath)
+	_, err := setup(logPath, level, false, config.NewManager().Get().Cleanup.Log)
+	return err
+}
 
-	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+func setup(logPath, level string, stderr bool, cleanup config.LogCleanupConfig) (*fileWriter, error) {
+	writer, err := newFileWriter(ExpandPath(logPath), cleanup)
 	if err != nil {
-		return err
+		return nil, err
 	}
-
 	var slogLevel slog.Level
 	switch level {
 	case "debug":
 		slogLevel = slog.LevelDebug
-	case "info":
-		slogLevel = slog.LevelInfo
 	case "warn":
 		slogLevel = slog.LevelWarn
 	case "error":
@@ -70,13 +43,12 @@ func SetFileOnly(logPath string, level string) error {
 	default:
 		slogLevel = slog.LevelInfo
 	}
-
-	handler := slog.NewTextHandler(logFile, &slog.HandlerOptions{
-		Level: slogLevel,
-	})
-
-	slog.SetDefault(slog.New(handler))
-	return nil
+	var output io.Writer = writer
+	if stderr {
+		output = io.MultiWriter(os.Stderr, writer)
+	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(output, &slog.HandlerOptions{Level: slogLevel})))
+	return writer, nil
 }
 
 // ExpandPath expands "~/" in paths (current user only), avoiding writing logs into a literal "~" directory under a relative path.
