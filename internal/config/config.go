@@ -18,6 +18,7 @@ type Config struct {
 	Targets  []TargetConfig `yaml:"targets"`
 	Session  SessionConfig  `yaml:"session"`
 	Log      LogConfig      `yaml:"log"`
+	Cleanup  CleanupConfig  `yaml:"cleanup"`
 	// AuditDB controls whether audit events are persisted to SQLite (only available in the "full" build; disabled by default).
 	AuditDB AuditDBConfig `yaml:"audit_db"`
 }
@@ -195,6 +196,10 @@ var defaultConfig = Config{
 		Level:     "info",
 		File:      "~/.vibeguard/vibeguard.log",
 		RedactLog: true,
+	},
+	Cleanup: CleanupConfig{
+		Log:        LogCleanupConfig{Interval: "24h", MaxSizeMB: 10, MaxBackups: 3},
+		SessionWAL: WALCleanupConfig{Interval: "1h"},
 	},
 	AuditDB: AuditDBConfig{
 		Enabled:   false,
@@ -381,6 +386,9 @@ func (m *Manager) Load() error {
 
 	// Normalize config: strip invisible chars, normalize categories, etc, to avoid "configured but not effective" surprises.
 	sanitizeLoadedConfig(&cfg)
+	if err := cfg.Cleanup.Validate(); err != nil {
+		return err
+	}
 
 	m.config = cfg
 	return nil
@@ -609,6 +617,8 @@ func sanitizeLoadedConfig(cfg *Config) {
 		cfg.Targets = out
 	}
 
+	normalizeCleanup(&cfg.Cleanup)
+
 	// AuditDB
 	cfg.AuditDB.Path = strings.TrimSpace(cfg.AuditDB.Path)
 	if cfg.AuditDB.Path == "" {
@@ -631,8 +641,19 @@ func (m *Manager) Get() Config {
 func (m *Manager) Update(fn func(*Config)) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	fn(&m.config)
-	return m.saveLocked()
+	candidate := m.config
+	fn(&candidate)
+	normalizeCleanup(&candidate.Cleanup)
+	if err := candidate.Cleanup.Validate(); err != nil {
+		return err
+	}
+	previous := m.config
+	m.config = candidate
+	if err := m.saveLocked(); err != nil {
+		m.config = previous
+		return err
+	}
+	return nil
 }
 
 // saveLocked writes the current config to disk (must be called with mu held)
@@ -820,6 +841,8 @@ func mergeConfigs(global, project Config) Config {
 	if project.Log.File != "" {
 		result.Log.File = project.Log.File
 	}
+
+	result.Cleanup = mergeCleanup(global.Cleanup, project.Cleanup)
 
 	// AuditDB: project-level can enable/override path/retention.
 	if project.AuditDB.Enabled {
