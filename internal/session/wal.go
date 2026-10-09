@@ -74,27 +74,65 @@ func (w *WAL) Append(entry WALEntry) error {
 		w.file = f
 	}
 
-	// Serialize entry
+	if err := w.writeEntry(w.file, entry); err != nil {
+		return err
+	}
+
+	return w.file.Sync()
+}
+
+// writeEntry retains the existing encrypted length-prefixed WAL format.
+func (w *WAL) writeEntry(file *os.File, entry WALEntry) error {
 	data, err := json.Marshal(entry)
 	if err != nil {
 		return fmt.Errorf("failed to marshal entry: %w", err)
 	}
-
-	// Encrypt
 	encrypted, err := w.encrypt(data)
 	if err != nil {
 		return fmt.Errorf("failed to encrypt entry: %w", err)
 	}
-
-	// Write length prefix + encrypted data
-	lenBuf := make([]byte, 4)
-	binary.BigEndian.PutUint32(lenBuf, uint32(len(encrypted)))
-
-	if _, err := w.file.Write(append(lenBuf, encrypted...)); err != nil {
+	record := make([]byte, 4+len(encrypted))
+	binary.BigEndian.PutUint32(record[:4], uint32(len(encrypted)))
+	copy(record[4:], encrypted)
+	if _, err := file.Write(record); err != nil {
 		return fmt.Errorf("failed to write entry: %w", err)
 	}
+	return nil
+}
 
-	return w.file.Sync()
+// Replace syncs an encrypted snapshot before replacing the old WAL. It never truncates the original.
+func (w *WAL) Replace(entries []WALEntry) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if err := os.MkdirAll(filepath.Dir(w.path), 0700); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(w.path), ".session-wal-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	defer tmp.Close()
+	for _, entry := range entries {
+		if err := w.writeEntry(tmp, entry); err != nil {
+			return err
+		}
+	}
+	if err := tmp.Sync(); err != nil {
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	// Close before rename so replacement also works on Windows.
+	if w.file != nil {
+		err := w.file.Close()
+		w.file = nil
+		if err != nil {
+			return err
+		}
+	}
+	return os.Rename(tmp.Name(), w.path)
 }
 
 // Load reads all entries from the WAL
@@ -116,17 +154,20 @@ func (w *WAL) Load() ([]WALEntry, error) {
 	}
 
 	var entries []WALEntry
+	var integrityErr error
 	offset := 0
 
 	for offset < len(data) {
 		if offset+4 > len(data) {
+			integrityErr = fmt.Errorf("truncated WAL length prefix")
 			break
 		}
 
 		length := binary.BigEndian.Uint32(data[offset : offset+4])
 		offset += 4
 
-		if offset+int(length) > len(data) {
+		if uint64(length) > uint64(len(data)-offset) {
+			integrityErr = fmt.Errorf("truncated WAL entry")
 			break
 		}
 
@@ -135,20 +176,20 @@ func (w *WAL) Load() ([]WALEntry, error) {
 
 		decrypted, err := w.decrypt(encrypted)
 		if err != nil {
-			slog.Warn("Failed to decrypt WAL entry", "error", err)
+			integrityErr = fmt.Errorf("failed to decrypt WAL entry: %w", err)
 			continue
 		}
 
 		var entry WALEntry
 		if err := json.Unmarshal(decrypted, &entry); err != nil {
-			slog.Warn("Failed to unmarshal WAL entry", "error", err)
+			integrityErr = fmt.Errorf("failed to unmarshal WAL entry: %w", err)
 			continue
 		}
 
 		entries = append(entries, entry)
 	}
 
-	return entries, nil
+	return entries, integrityErr
 }
 
 // Close closes the WAL file
@@ -203,9 +244,6 @@ func (w *WAL) decrypt(data []byte) ([]byte, error) {
 // RestoreInto loads WAL entries into a session manager
 func (w *WAL) RestoreInto(m *Manager) error {
 	entries, err := w.Load()
-	if err != nil {
-		return err
-	}
 
 	for _, entry := range entries {
 		// Check if entry is expired
@@ -219,5 +257,5 @@ func (w *WAL) RestoreInto(m *Manager) error {
 	}
 
 	slog.Info("Restored mappings from WAL", "count", len(entries))
-	return nil
+	return err
 }

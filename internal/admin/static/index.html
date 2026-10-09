@@ -415,7 +415,7 @@ const i18n = {
     'debug.detail.copy': '复制',
     'debug.detail.close': '关闭',
     'settings.title': '设置',
-    'settings.subtitle': '代理实验功能和运行时开关。',
+    'settings.subtitle': '代理功能开关与自动清理策略。',
     'settings.experimental': '实验功能',
     'settings.websocket.title': 'WebSocket 脱敏',
     'settings.websocket.beta': 'Beta',
@@ -423,6 +423,17 @@ const i18n = {
     'settings.websocket.statusOn': '已开启',
     'settings.websocket.statusOff': '已关闭',
     'settings.websocket.hint': '仅处理未压缩的文本消息；二进制帧、控制帧和带压缩扩展的数据帧会自动透传。部分服务端可能仍会因 MITM/TLS 指纹拒绝连接。',
+    'settings.cleanup.title': '自动清理',
+    'settings.cleanup.log': '运行日志',
+    'settings.cleanup.wal': '会话持久化文件',
+    'settings.cleanup.enabled': '开启自动清理',
+    'settings.cleanup.interval': '清理周期',
+    'settings.cleanup.maxSize': '日志文件上限（MiB）',
+    'settings.cleanup.backups': '保留备份数量',
+    'settings.cleanup.logHint': '按周期或文件大小轮转，自动删除超出保留数量的旧备份。关闭后日志会持续追加。',
+    'settings.cleanup.walHint': '按周期压缩会话文件，仅保留未过期、未被淘汰的映射。关闭不影响内存映射的正常过期。',
+    'settings.cleanup.durationHint': '周期支持 30m、1h、24h、7d，最短 1 分钟。按运行时长计时，每分钟检查；修改开关或周期后重新计时。保存后生效。',
+    'settings.cleanup.save': '保存清理设置',
     'settings.updated': '设置已更新',
     'settings.updateFailed': '设置更新失败',
     'audit.title': '拦截记录',
@@ -733,7 +744,7 @@ const i18n = {
     'debug.detail.copy': 'Copy',
     'debug.detail.close': 'Close',
     'settings.title': 'Settings',
-    'settings.subtitle': 'Proxy experiments and runtime feature flags.',
+    'settings.subtitle': 'Proxy feature switches and automatic cleanup policies.',
     'settings.experimental': 'Experimental',
     'settings.websocket.title': 'WebSocket Redaction',
     'settings.websocket.beta': 'Beta',
@@ -741,6 +752,17 @@ const i18n = {
     'settings.websocket.statusOn': 'Enabled',
     'settings.websocket.statusOff': 'Disabled',
     'settings.websocket.hint': 'Only uncompressed text messages are transformed. Binary/control frames and compressed extension frames are passed through. Some servers may still reject MITM/TLS fingerprints.',
+    'settings.cleanup.title': 'Automatic cleanup',
+    'settings.cleanup.log': 'Runtime logs',
+    'settings.cleanup.wal': 'Session persistence',
+    'settings.cleanup.enabled': 'Enable automatic cleanup',
+    'settings.cleanup.interval': 'Cleanup interval',
+    'settings.cleanup.maxSize': 'Maximum log size (MiB)',
+    'settings.cleanup.backups': 'Backups to keep',
+    'settings.cleanup.logHint': 'Rotate by interval or size and delete excess backups. Disabling cleanup lets logs grow continuously.',
+    'settings.cleanup.walHint': 'Compact the session file periodically, keeping only unexpired mappings still in memory. Disabling this does not change in-memory expiration.',
+    'settings.cleanup.durationHint': 'Use 30m, 1h, 24h, or 7d; minimum 1 minute. Intervals count running time and are checked every minute. Changing a switch or interval resets its timer. Saved settings take effect automatically.',
+    'settings.cleanup.save': 'Save cleanup settings',
     'settings.updated': 'Settings updated',
     'settings.updateFailed': 'Failed to update settings',
     'audit.title': 'Audit',
@@ -2935,11 +2957,7 @@ async function toggleDeterministicPlaceholders(on) {
 
 async function loadManagerSettings() {
   const d = await api.get('/settings');
-  state.settings = {
-    proxy: {
-      websocket_redaction_beta: !!d?.proxy?.websocket_redaction_beta
-    }
-  };
+  state.settings = d;
 }
 
 function renderSettingsMeta() {
@@ -2951,6 +2969,15 @@ function renderSettingsMeta() {
     tag.className = 'tag ' + (enabled ? 'tag-green' : 'tag-yellow');
   }
   if (toggle) toggle.checked = enabled;
+  const cleanup = state.settings?.cleanup;
+  if (!cleanup || !document.getElementById('cleanup-save')) return;
+  document.getElementById('cleanup-log-enabled').checked = !!cleanup.log.enabled;
+  document.getElementById('cleanup-log-interval').value = cleanup.log.interval;
+  document.getElementById('cleanup-log-size').value = cleanup.log.max_size_mb;
+  document.getElementById('cleanup-log-backups').value = cleanup.log.max_backups;
+  document.getElementById('cleanup-wal-enabled').checked = !!cleanup.session_wal.enabled;
+  document.getElementById('cleanup-wal-interval').value = cleanup.session_wal.interval;
+  document.getElementById('cleanup-save').disabled = false;
 }
 
 let settingsBusy = false;
@@ -2960,11 +2987,7 @@ async function toggleWebSocketRedactionBeta(on) {
   settingsBusy = true;
   try {
     const d = await api.post('/settings', { proxy: { websocket_redaction_beta: !!on } });
-    state.settings = {
-      proxy: {
-        websocket_redaction_beta: !!d?.proxy?.websocket_redaction_beta
-      }
-    };
+    state.settings = d;
     renderSettingsMeta();
     toast(t('settings.updated'));
   } catch (e) {
@@ -2975,6 +2998,36 @@ async function toggleWebSocketRedactionBeta(on) {
     toast(t('settings.updateFailed') + ': ' + e.message, 'error');
   } finally {
     settingsBusy = false;
+  }
+}
+
+async function saveCleanupSettings(event) {
+  event.preventDefault();
+  if (settingsBusy) return;
+  const cleanup = {
+    log: {
+      enabled: document.getElementById('cleanup-log-enabled').checked,
+      interval: document.getElementById('cleanup-log-interval').value.trim(),
+      max_size_mb: Number(document.getElementById('cleanup-log-size').value),
+      max_backups: Number(document.getElementById('cleanup-log-backups').value)
+    },
+    session_wal: {
+      enabled: document.getElementById('cleanup-wal-enabled').checked,
+      interval: document.getElementById('cleanup-wal-interval').value.trim()
+    }
+  };
+  settingsBusy = true;
+  const button = document.getElementById('cleanup-save');
+  button.disabled = true;
+  try {
+    state.settings = await api.post('/settings', { cleanup });
+    renderSettingsMeta();
+    toast(t('settings.updated'));
+  } catch (e) {
+    toast(t('settings.updateFailed') + ': ' + e.message, 'error');
+  } finally {
+    settingsBusy = false;
+    button.disabled = false;
   }
 }
 
@@ -2998,7 +3051,28 @@ async function renderSettings() {
           '<span class="pill-slider"></span>' +
         '</label>' +
       '</div>' +
-    '</div>';
+    '</div>' +
+    '<form class="card p-6 mt-6" onsubmit="saveCleanupSettings(event)">' +
+      '<h3 class="font-semibold text-text mb-4">' + t('settings.cleanup.title') + '</h3>' +
+      '<div class="grid grid-cols-1 md:grid-cols-2 gap-6">' +
+        '<div>' +
+          '<h4 class="font-semibold mb-3">' + t('settings.cleanup.log') + '</h4>' +
+          '<label class="flex items-center gap-2 mb-3"><input type="checkbox" id="cleanup-log-enabled">' + t('settings.cleanup.enabled') + '</label>' +
+          '<label class="block text-sm mb-3" for="cleanup-log-interval">' + t('settings.cleanup.interval') + '<input class="w-full mt-1 px-3 py-2" type="text" id="cleanup-log-interval" required placeholder="24h"></label>' +
+          '<label class="block text-sm mb-3" for="cleanup-log-size">' + t('settings.cleanup.maxSize') + '<input class="w-full mt-1 px-3 py-2" type="number" id="cleanup-log-size" min="1" max="1024" step="1" required></label>' +
+          '<label class="block text-sm mb-3" for="cleanup-log-backups">' + t('settings.cleanup.backups') + '<input class="w-full mt-1 px-3 py-2" type="number" id="cleanup-log-backups" min="1" max="100" step="1" required></label>' +
+          '<p class="text-xs text-muted">' + t('settings.cleanup.logHint') + '</p>' +
+        '</div>' +
+        '<div>' +
+          '<h4 class="font-semibold mb-3">' + t('settings.cleanup.wal') + '</h4>' +
+          '<label class="flex items-center gap-2 mb-3"><input type="checkbox" id="cleanup-wal-enabled">' + t('settings.cleanup.enabled') + '</label>' +
+          '<label class="block text-sm mb-3" for="cleanup-wal-interval">' + t('settings.cleanup.interval') + '<input class="w-full mt-1 px-3 py-2" type="text" id="cleanup-wal-interval" required placeholder="1h"></label>' +
+          '<p class="text-xs text-muted">' + t('settings.cleanup.walHint') + '</p>' +
+        '</div>' +
+      '</div>' +
+      '<p class="text-xs text-muted mt-4">' + t('settings.cleanup.durationHint') + '</p>' +
+      '<button id="cleanup-save" class="btn btn-primary mt-4" type="submit" disabled>' + t('settings.cleanup.save') + '</button>' +
+    '</form>';
 
   await loadManagerSettings();
   renderSettingsMeta();

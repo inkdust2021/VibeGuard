@@ -112,9 +112,17 @@ func NewServer(cfg *config.Manager, ca *cert.CA, certPath, keyPath string) (*Ser
 			return nil, fmt.Errorf("failed to init session WAL: %w", err)
 		}
 		if err := wal.RestoreInto(sess); err != nil {
-			slog.Warn("Failed to restore session WAL; continuing with empty in-memory mappings", "error", err, "path", walPath)
+			// Preserve unreadable/partially restored history; later cleanup must not replace it either.
+			slog.Warn("Session WAL restore incomplete; persistence disabled until restart, original WAL preserved", "error", err, "path", walPath)
+			_ = wal.Close()
+		} else {
+			sess.AttachWAL(wal)
+			if c.Cleanup.SessionWAL.IsEnabled() {
+				if err := sess.CompactWAL(); err != nil {
+					slog.Warn("Failed to compact restored session WAL", "error", err)
+				}
+			}
 		}
-		sess.AttachWAL(wal)
 	}
 
 	// Create goproxy
@@ -1136,6 +1144,10 @@ func looksLikeSSEPrefix(prefix []byte) bool {
 }
 
 func (s *Server) applyConfig(c config.Config) {
+	interval, err := config.ParseCleanupInterval(c.Cleanup.SessionWAL.Interval)
+	if err == nil {
+		s.session.ConfigureWALCleanup(c.Cleanup.SessionWAL.IsEnabled(), interval)
+	}
 	// Session placeholder key mode:
 	// - default: process-random key (stable only within the process)
 	// - deterministic_placeholders: derive key from CA (stable across processes)
