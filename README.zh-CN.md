@@ -97,25 +97,42 @@ flowchart LR
 
 ## 卸载
 
-macOS/Linux：
+安装后的程序内置卸载脚本，macOS、Linux 和 Windows 均可离线执行：
+
+```bash
+vibeguard uninstall
+```
+
+执行任何清理前，会询问是否保留配置、CA 私钥、日志和 WAL。输入 `y` 保留，输入 `n` 删除，由用户决定。也可以明确指定，适合自动化使用：
+
+```bash
+vibeguard uninstall --keep-config --non-interactive
+vibeguard uninstall --purge --yes --non-interactive
+```
+
+单独指定 `--yes` 不会替用户选择。`--dir PATH` 指定安装目录，默认使用当前程序所在目录。Windows 可追加 `--remove-path` 移除用户 PATH 中的安装目录；仅在该目录专用于 VibeGuard 时使用。
+
+卸载会停止代理、移除自启服务、撤销 CA 信任、清理安装时写入的 shell/Profile 助手并删除程序。`--purge` 还会删除整个 `~/.vibeguard`，包括配置、证书及私钥、日志及备份、会话 WAL 和审计数据。项目 `.vibeguard.yaml`、目录外的自定义文件、导出/下载的证书、共用安装目录和 shell/Profile 安全备份由用户管理。卸载后重开终端，让父 shell 已加载的环境变量和函数失效。
+
+清理失败会返回错误；CA 信任移除或检查失败时，会保留程序、证书和配置供重试。系统信任库可能需要管理员权限（macOS/Linux 非交互卸载前可执行 `sudo -v`）。Windows 通过后台任务在命令退出后删除正在运行的程序：输出中的临时结果文件记录 `complete` 或 `failed: ...`，请检查结果后再确认卸载完成，结果文件可自行删除。
+
+旧版本仍可使用独立卸载脚本（未选择 purge 时保留配置）：
 
 ```bash
 curl -fsSL https://vibeguard.top/uninstall | bash
-curl -fsSL https://vibeguard.top/uninstall | bash -s -- --purge
-curl -fsSL https://vibeguard.top/uninstall | bash -s -- --docker
-curl -fsSL https://vibeguard.top/uninstall | bash -s -- --docker --docker-volume
+curl -fsSL https://vibeguard.top/uninstall | bash -s -- --purge --yes
+# Docker-only：保留数据卷中的配置和原管理页密码。
+curl -fsSL https://vibeguard.top/uninstall | bash -s -- --docker --keep-config --yes
+# 删除容器、数据卷（包含密码）及本地配置。
+curl -fsSL https://vibeguard.top/uninstall | bash -s -- --docker-volume --purge --yes
 ```
 
-提示：`--docker-volume` 会删除 Docker 数据卷 `vibeguard-data`（容器内的配置与 CA 将丢失）。
-
-Windows（PowerShell）：
+`--docker-volume` 会删除 `vibeguard-data`，包括管理页密码、配置、证书私钥、日志和 WAL。单独使用 `--docker` 会保留数据卷和原密码。Docker 不可用、查询或删除失败时会返回错误，保留本地配置供重试。Docker-only 安装应运行宿主机卸载脚本，容器内 CLI 无法卸载宿主机助手。
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -Command "& ([ScriptBlock]::Create((irm https://vibeguard.top/uninstall.ps1)))"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "& ([ScriptBlock]::Create((irm https://vibeguard.top/uninstall.ps1))) -Purge"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "& ([ScriptBlock]::Create((irm https://vibeguard.top/uninstall.ps1))) -KeepConfig"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "& ([ScriptBlock]::Create((irm https://vibeguard.top/uninstall.ps1))) -Purge -Yes"
 ```
-
-卸载脚本会自动尝试移除系统/用户信任库中的 “VibeGuard CA”。若自动移除失败（如权限不足），请再手动移除。
 
 ## 配置说明
 

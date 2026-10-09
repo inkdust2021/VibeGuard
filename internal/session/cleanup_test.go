@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -57,7 +58,8 @@ func TestWALCompactionPreservesLiveMappings(t *testing.T) {
 	if bytes.Contains(raw, []byte("synthetic-secret")) {
 		t.Fatal("plaintext WAL")
 	}
-	if after.Mode().Perm() != 0600 {
+	// Windows FileMode does not represent Unix permission bits.
+	if runtime.GOOS != "windows" && after.Mode().Perm() != 0600 {
 		t.Fatalf("unsafe permissions: %v", after.Mode())
 	}
 	m.Register("new", "another-secret")

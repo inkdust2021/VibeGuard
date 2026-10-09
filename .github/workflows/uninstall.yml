@@ -1,0 +1,44 @@
+name: Uninstall regression tests
+on:
+  pull_request:
+    paths:
+      - 'cmd/vibeguard/**'
+      - 'uninstall*'
+      - 'scripts/test-uninstall*'
+      - 'Dockerfile'
+      - 'docker-entrypoint.sh'
+      - 'docker-compose*.yml'
+      - '.github/workflows/uninstall.yml'
+  workflow_dispatch:
+jobs:
+  uninstall:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.x'
+      - run: go test ./...
+      - name: Build CLI
+        shell: bash
+        run: go build -o "$RUNNER_TEMP/vibeguard.exe" ./cmd/vibeguard
+      - name: Unix isolated uninstall tests
+        if: runner.os != 'Windows'
+        run: python3 scripts/test-uninstall.py "$RUNNER_TEMP/vibeguard.exe"
+      - name: PowerShell regression tests
+        shell: pwsh
+        run: ./scripts/test-uninstall-powershell.ps1
+      - name: Build Docker deployment test image
+        if: runner.os == 'Linux'
+        run: docker build -t vibeguard-uninstall-ci .
+      - name: Docker deployment keep/purge regression tests
+        if: runner.os == 'Linux'
+        run: python3 scripts/test-uninstall-docker.py "$RUNNER_TEMP/vibeguard.exe" vibeguard-uninstall-ci
+      - name: Windows CLI and self-deletion
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/test-uninstall-windows.ps1 -BinaryPath "$env:RUNNER_TEMP/vibeguard.exe"
