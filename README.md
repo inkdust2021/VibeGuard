@@ -118,11 +118,13 @@ For older installations, the standalone scripts are still available (they retain
 ```bash
 curl -fsSL https://vibeguard.top/uninstall | bash
 curl -fsSL https://vibeguard.top/uninstall | bash -s -- --purge --yes
-# Docker-only installations: remove the container and optionally its data volume.
-curl -fsSL https://vibeguard.top/uninstall | bash -s -- --docker --docker-volume --yes
+# Docker-only: keep configuration and the existing manager password in the volume.
+curl -fsSL https://vibeguard.top/uninstall | bash -s -- --docker --keep-config --yes
+# Delete the container, data volume (including password) and local configuration.
+curl -fsSL https://vibeguard.top/uninstall | bash -s -- --docker-volume --purge --yes
 ```
 
-`--docker-volume` removes `vibeguard-data` (container configuration and CA). Run the host script for Docker-only installations; the CLI inside the container cannot uninstall host helpers.
+`--docker-volume` removes `vibeguard-data`, including the manager password, configuration, CA/private key, logs and WAL. `--docker` alone keeps the volume and its password. Docker availability/query/deletion failures return an error and preserve local configuration for retry. Run the host script for Docker-only installations; the CLI inside the container cannot uninstall host helpers.
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -Command "& ([ScriptBlock]::Create((irm https://vibeguard.top/uninstall.ps1))) -KeepConfig"

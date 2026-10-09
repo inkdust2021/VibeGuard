@@ -361,7 +361,7 @@ remove_autostart_linux() {
       if ! load_state="$(systemctl --user show -p LoadState --value vibeguard.service 2>/dev/null)"; then
         local user_processes
         user_processes="$(ps -u "$(id -u)" -o args=)" || die "无法检查用户服务进程" "Could not check user service processes"
-        if echo "${user_processes}" | grep -Eq '(^|/)systemd --user([[:space:]]|$)'; then
+        if grep -Eq '(^|/)systemd --user([[:space:]]|$)' <<< "${user_processes}"; then
           die "无法检查 systemd 服务" "Could not check systemd service"
         fi
         # Detached/container installs may have systemctl but no user manager.
@@ -405,86 +405,40 @@ remove_installed_binary() {
   fi
 }
 
-docker_container_exists() {
-  local name="${1:-}"
-  [[ -n "${name}" ]] || return 1
-  docker ps -a --format '{{.Names}}' 2>/dev/null | grep -Fxq "${name}"
-}
-
-docker_volume_exists() {
-  local name="${1:-}"
-  [[ -n "${name}" ]] || return 1
-  docker volume ls --format '{{.Name}}' 2>/dev/null | grep -Fxq "${name}"
-}
-
-cleanup_docker_best_effort() {
+cleanup_docker() {
   local container_name="vibeguard"
   local volume_name="vibeguard-data"
+  [[ "${DOCKER_CLEANUP}" == "1" ]] || return 0
 
-  if [[ "${DOCKER_CLEANUP}" != "1" ]]; then
-    return 0
-  fi
+  have docker || die "未找到 docker，无法清理 Docker 部署" "docker not found; cannot clean Docker deployment"
+  docker info >/dev/null 2>&1 || die "Docker 不可用，保留配置供重试" "Docker unavailable; configuration preserved for retry"
 
-  if [[ "${YES}" != "1" && "${NON_INTERACTIVE}" == "1" ]]; then
-    die "非交互模式下执行 --docker/--docker-volume 需要同时带上 --yes" "In non-interactive mode, --docker/--docker-volume requires --yes"
-  fi
-
-  if ! have docker; then
-    warn "未找到 docker：跳过 Docker 清理" "docker not found; skipping Docker cleanup"
-    return 0
-  fi
-
-  if ! docker info >/dev/null 2>&1; then
-    warn "Docker 未运行或不可用：跳过 Docker 清理" "Docker does not seem to be running; skipping Docker cleanup"
-    return 0
-  fi
-
-  if docker_container_exists "${container_name}"; then
-    if [[ "${YES}" != "1" && "${NON_INTERACTIVE}" == "0" && is_tty ]]; then
-      echo ""
-      echo "⚠️ $(t "将删除 Docker 容器：${container_name}（不会删除数据卷）" "This will remove Docker container: ${container_name} (keeps volumes)")"
-      read -r -p "$(t "确认删除容器？[y/N]: " "Confirm remove container? [y/N]: ")" ans || true
-      ans="${ans:-N}"
-      if [[ "${ans}" != "Y" && "${ans}" != "y" ]]; then
-        warn "已跳过 Docker 容器删除" "Skipped Docker container removal"
-      else
-        if docker rm -f "${container_name}" >/dev/null 2>&1; then
-          echo "$(t "已删除 Docker 容器：${container_name}" "Removed Docker container: ${container_name}")"
-        else
-          warn "删除 Docker 容器失败：${container_name}" "Failed to remove Docker container: ${container_name}"
-        fi
-      fi
-    else
-      if docker rm -f "${container_name}" >/dev/null 2>&1; then
-        echo "$(t "已删除 Docker 容器：${container_name}" "Removed Docker container: ${container_name}")"
-      else
-        warn "删除 Docker 容器失败：${container_name}" "Failed to remove Docker container: ${container_name}"
-      fi
-    fi
-  else
-    echo "$(t "未找到 Docker 容器：${container_name}" "Docker container not found: ${container_name}")"
-  fi
-
+  # Query both resources before changing either; query failures are not absence.
+  local containers volumes=""
+  containers="$(docker ps -a --format '{{.Names}}')" || die "无法查询 Docker 容器" "Could not query Docker containers"
   if [[ "${DOCKER_VOLUME_CLEANUP}" == "1" ]]; then
-    if docker_volume_exists "${volume_name}"; then
-      if [[ "${YES}" != "1" && "${NON_INTERACTIVE}" == "0" && is_tty ]]; then
-        echo ""
-        echo "⚠️ $(t "将删除 Docker 数据卷：${volume_name}（会丢失容器内配置与 CA）" "This will remove Docker volume: ${volume_name} (loses container config + CA)")"
-        read -r -p "$(t "确认删除数据卷？[y/N]: " "Confirm remove volume? [y/N]: ")" ans || true
-        ans="${ans:-N}"
-        if [[ "${ans}" != "Y" && "${ans}" != "y" ]]; then
-          warn "已跳过 Docker 数据卷删除" "Skipped Docker volume removal"
-          return 0
-        fi
-      fi
-      if docker volume rm "${volume_name}" >/dev/null 2>&1; then
-        echo "$(t "已删除 Docker 数据卷：${volume_name}" "Removed Docker volume: ${volume_name}")"
-      else
-        warn "删除 Docker 数据卷失败：${volume_name}（可能仍被容器占用）" "Failed to remove Docker volume: ${volume_name} (may still be in use)"
-      fi
-    else
-      echo "$(t "未找到 Docker 数据卷：${volume_name}" "Docker volume not found: ${volume_name}")"
+    volumes="$(docker volume ls --format '{{.Name}}')" || die "无法查询 Docker 数据卷" "Could not query Docker volumes"
+  fi
+
+  if grep -Fxq "${container_name}" <<< "${containers}"; then
+    local remove_container="1" ans
+    if [[ "${YES}" != "1" && "${NON_INTERACTIVE}" == "0" ]] && is_tty; then
+      read -r -p "$(t "删除 Docker 容器（保留数据卷）？[y/N]: " "Remove Docker container (keep volume)? [y/N]: ")" ans
+      [[ "${ans}" == "y" || "${ans}" == "Y" ]] || remove_container="0"
     fi
+    if [[ "${remove_container}" == "1" ]]; then
+      docker rm -f "${container_name}" >/dev/null || die "无法删除 Docker 容器；保留配置供重试" "Could not remove Docker container; configuration preserved for retry"
+      echo "$(t "已删除 Docker 容器：${container_name}" "Removed Docker container: ${container_name}")"
+    fi
+  fi
+
+  if [[ "${DOCKER_VOLUME_CLEANUP}" == "1" ]] && grep -Fxq "${volume_name}" <<< "${volumes}"; then
+    if [[ "${YES}" != "1" && "${NON_INTERACTIVE}" == "0" ]] && is_tty; then
+      read -r -p "$(t "删除数据卷及其中的密码、配置和 CA？[y/N]: " "Delete volume including password, configuration and CA? [y/N]: ")" ans
+      [[ "${ans}" == "y" || "${ans}" == "Y" ]] || return 0
+    fi
+    docker volume rm "${volume_name}" >/dev/null || die "无法删除 Docker 数据卷；保留配置供重试" "Could not remove Docker volume; configuration preserved for retry"
+    echo "$(t "已删除 Docker 数据卷：${volume_name}" "Removed Docker volume: ${volume_name}")"
   fi
 }
 
@@ -611,8 +565,10 @@ if [[ "${PURGE}" == "1" && "${YES}" != "1" ]]; then
   [[ "${ans}" == "y" || "${ans}" == "Y" ]] || exit 1
   YES="1"
 fi
-if [[ "${DOCKER_CLEANUP}" == "1" && "${YES}" != "1" && "${NON_INTERACTIVE}" == "1" ]]; then
-  die "Docker 清理需要 --yes" "Docker cleanup requires --yes"
+if [[ "${DOCKER_CLEANUP}" == "1" && "${YES}" != "1" ]]; then
+  if [[ "${NON_INTERACTIVE}" == "1" ]] || ! is_tty; then
+    die "Docker 清理需要 --yes" "Docker cleanup requires --yes"
+  fi
 fi
 
 say "开始卸载" "Starting uninstall"
@@ -630,7 +586,7 @@ say "停止后台代理" "Stopping proxy"
 stop_proxy_best_effort
 
 say "清理 Docker（可选）" "Cleaning Docker (optional)"
-cleanup_docker_best_effort
+cleanup_docker
 
 say "移除信任证书" "Removing trusted CA"
 if ! untrust_ca; then

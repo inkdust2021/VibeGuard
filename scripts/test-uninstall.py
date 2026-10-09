@@ -232,6 +232,23 @@ exec /bin/rm "$@"''')
         self.assertFalse(self.bin.exists())
         self.assertFalse(self.cfg.exists())
 
+    def test_unreachable_systemd_manager_is_not_ignored_in_large_process_list(self):
+        self.stub("uname", "echo Linux")
+        self.stub("systemctl", "exit 1")
+        self.stub("ps", "echo '/usr/lib/systemd/systemd --user'; awk 'BEGIN { for (i=0;i<20000;i++) print \"other-process-\" i }'")
+        self.stub("update-ca-certificates", "exit 0")
+        script = (ROOT / "uninstall.sh").read_text()
+        for system_dir in ["/usr/local/share/ca-certificates", "/etc/ssl/certs", "/etc/pki/ca-trust/source/anchors"]:
+            script = script.replace(system_dir, str(self.home / "trust"))
+        fixture = self.home / "uninstall-manager-query.sh"
+        fixture.write_text(script)
+        result = subprocess.run(["bash", str(fixture), "--dir", str(self.bin_dir),
+                                 "--purge", "--yes", "--non-interactive"],
+                                env=self.env, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue(self.bin.exists())
+        self.assertTrue(self.cfg.exists())
+
     def test_linux_service_and_trust_cleanup(self):
         self.stub("uname", "echo Linux")
         self.stub("systemctl", '''[ "${FAIL_SERVICE:-}" != 1 ] || exit 1
@@ -266,6 +283,57 @@ else rm -f "$HOME/service-active"; fi''')
         self.assertFalse(link.is_symlink(), "Enabled service symlink remains")
         for path in [unit, trust_path, self.bin, self.cfg, self.home / "service-active"]:
             self.assertFalse(path.exists(), str(path))
+
+    def test_docker_requires_yes_before_mutation(self):
+        self.stub("docker", "exit 0")
+        result = subprocess.run(["bash", str(ROOT / "uninstall.sh"), "--dir", str(self.bin_dir), "--docker-volume"],
+                                env=self.env, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue(self.plist.exists())
+        self.assertTrue(self.bin.exists())
+
+    def test_large_docker_listings_do_not_skip_cleanup(self):
+        self.stub("docker", '''case "$1:$2" in
+info:) exit 0;;
+ps:-a) echo vibeguard; awk 'BEGIN { for (i=0;i<20000;i++) print "other-container-" i }';;
+volume:ls) echo vibeguard-data; awk 'BEGIN { for (i=0;i<20000;i++) print "other-volume-" i }';;
+rm:-f) rm -f "$HOME/docker-container";;
+volume:rm) rm -f "$HOME/docker-volume";;
+*) exit 2;;
+esac''')
+        for name in ["docker-container", "docker-volume"]:
+            (self.home / name).touch()
+        result = subprocess.run(["bash", str(ROOT / "uninstall.sh"), "--dir", str(self.bin_dir),
+                                 "--docker-volume", "--yes", "--non-interactive"],
+                                env=self.env, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        for name in ["docker-container", "docker-volume"]:
+            self.assertFalse((self.home / name).exists(), "Large listing skipped " + name)
+
+    def test_docker_errors_are_not_reported_as_success(self):
+        self.stub("docker", '''case "$1:$2" in
+info:) [ "${FAIL_DOCKER:-}" != info ];;
+ps:-a) [ "${FAIL_DOCKER:-}" != query ] || exit 1
+[ ! -f "$HOME/docker-container" ] || echo vibeguard;;
+volume:ls) [ "${FAIL_DOCKER:-}" != volume-query ] || exit 1
+[ ! -f "$HOME/docker-volume" ] || echo vibeguard-data;;
+rm:-f) [ "${FAIL_DOCKER:-}" != container ] || exit 1
+rm -f "$HOME/docker-container";;
+volume:rm) [ "${FAIL_DOCKER:-}" != volume ] || exit 1
+rm -f "$HOME/docker-volume";;
+*) exit 2;;
+esac''')
+        for failure in ["info", "query", "volume-query", "container", "volume"]:
+            with self.subTest(failure=failure):
+                (self.home / "docker-container").touch()
+                (self.home / "docker-volume").touch()
+                result = subprocess.run(["bash", str(ROOT / "uninstall.sh"), "--dir", str(self.bin_dir),
+                                         "--docker-volume", "--purge", "--yes", "--non-interactive"],
+                                        env=dict(self.env, FAIL_DOCKER=failure), capture_output=True, text=True)
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertTrue(self.bin.exists())
+                self.assertTrue(self.cfg.exists())
+                self.assertNotIn("Uninstall complete", result.stdout)
 
     def test_script_repeat_and_preflight(self):
         command = ["bash", str(ROOT / "uninstall.sh"), "--dir", str(self.bin_dir)]

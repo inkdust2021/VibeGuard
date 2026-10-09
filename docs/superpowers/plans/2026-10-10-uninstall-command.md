@@ -40,3 +40,12 @@ Windows worker uses the documented detached Start-Process and process-handle wai
 - https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.management/wait-process?view=powershell-5.1
 
 Temporary test runtime: official PowerShell v7.6.6 macOS arm64 binary distribution (MIT), outside the repository.
+
+## Docker deployment follow-up
+
+- [x] Reproduce false success for unavailable Docker, failed container/volume queries and failed deletion; require `--yes` before mutations for piped Docker cleanup.
+- [x] Propagate Docker failures, query resources before deletion, preserve local config for retry.
+- [x] Build the project Dockerfile and test actual UUID-named deployment resources: keep data/password, purge container/volume/password, repeated cleanup, unrelated container preservation. Docker-dependent tests run separately from deterministic unit/fixture tests.
+- [x] Add real deployment regression tests to Ubuntu CI and document host-side keep/purge commands.
+
+Local evidence after merging PR #13 into the uninstall branch: full Go tests, 24 isolated uninstall tests, 2 actual Docker deployment tests and PowerShell fixtures passed. No actual user deployment resources were removed.

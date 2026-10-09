@@ -121,11 +121,13 @@ vibeguard uninstall --purge --yes --non-interactive
 ```bash
 curl -fsSL https://vibeguard.top/uninstall | bash
 curl -fsSL https://vibeguard.top/uninstall | bash -s -- --purge --yes
-# Docker-only 安装：删除容器，并按需删除数据卷。
-curl -fsSL https://vibeguard.top/uninstall | bash -s -- --docker --docker-volume --yes
+# Docker-only：保留数据卷中的配置和原管理页密码。
+curl -fsSL https://vibeguard.top/uninstall | bash -s -- --docker --keep-config --yes
+# 删除容器、数据卷（包含密码）及本地配置。
+curl -fsSL https://vibeguard.top/uninstall | bash -s -- --docker-volume --purge --yes
 ```
 
-`--docker-volume` 会删除 `vibeguard-data`（容器配置与 CA）。Docker-only 安装应运行宿主机卸载脚本，容器内 CLI 无法卸载宿主机助手。
+`--docker-volume` 会删除 `vibeguard-data`，包括管理页密码、配置、证书私钥、日志和 WAL。单独使用 `--docker` 会保留数据卷和原密码。Docker 不可用、查询或删除失败时会返回错误，保留本地配置供重试。Docker-only 安装应运行宿主机卸载脚本，容器内 CLI 无法卸载宿主机助手。
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -Command "& ([ScriptBlock]::Create((irm https://vibeguard.top/uninstall.ps1))) -KeepConfig"

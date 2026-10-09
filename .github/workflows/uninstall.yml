@@ -5,6 +5,9 @@ on:
       - 'cmd/vibeguard/**'
       - 'uninstall*'
       - 'scripts/test-uninstall*'
+      - 'Dockerfile'
+      - 'docker-entrypoint.sh'
+      - 'docker-compose*.yml'
       - '.github/workflows/uninstall.yml'
   workflow_dispatch:
 jobs:
@@ -29,6 +32,12 @@ jobs:
       - name: PowerShell regression tests
         shell: pwsh
         run: ./scripts/test-uninstall-powershell.ps1
+      - name: Build Docker deployment test image
+        if: runner.os == 'Linux'
+        run: docker build -t vibeguard-uninstall-ci .
+      - name: Docker deployment keep/purge regression tests
+        if: runner.os == 'Linux'
+        run: python3 scripts/test-uninstall-docker.py "$RUNNER_TEMP/vibeguard.exe" vibeguard-uninstall-ci
       - name: Windows CLI and self-deletion
         if: runner.os == 'Windows'
         shell: pwsh
