@@ -95,7 +95,7 @@ func (a *Admin) handleLogsStream(w http.ResponseWriter, r *http.Request) {
 	// Capture the initial file identity and offset before sending the snapshot.
 	var pos int64
 	var previous os.FileInfo
-	if st, err := os.Stat(effective); err == nil {
+	if st, err := statLogFile(effective); err == nil {
 		previous = st
 		pos = st.Size()
 	}
@@ -125,7 +125,7 @@ func (a *Admin) handleLogsStream(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			return
 		case <-ticker.C:
-			st, err := os.Stat(effective)
+			st, err := statLogFile(effective)
 			if err != nil {
 				continue
 			}
@@ -197,6 +197,17 @@ func resolveLogPath(configured string) (effective string, warning string) {
 		return expanded, ""
 	}
 	return configured, ""
+}
+
+func statLogFile(path string) (os.FileInfo, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	// File.Stat captures the identity now; on Windows os.Stat resolves it lazily
+	// by path, which may already refer to a replacement when SameFile is called.
+	return f.Stat()
 }
 
 func readFileRange(path string, start, end int64) ([]byte, error) {
