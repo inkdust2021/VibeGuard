@@ -38,7 +38,9 @@ import (
 	"github.com/inkdust2021/vibeguard/internal/rulelists"
 	"github.com/inkdust2021/vibeguard/internal/secretsources"
 	"github.com/inkdust2021/vibeguard/internal/session"
+	"github.com/inkdust2021/vibeguard/internal/mcp"
 	"github.com/inkdust2021/vibeguard/internal/stream"
+	"github.com/inkdust2021/vibeguard/internal/version"
 	"github.com/inkdust2021/vibeguard/internal/wsproxy"
 	"github.com/inkdust2021/vibeguard/internal/zstd"
 )
@@ -55,6 +57,7 @@ type runtimeConfig struct {
 	interceptMode          string
 	targets                map[string]bool
 	redactEng              redact.Redactor
+	redactEngine           *redact.Engine // 用于 MCP Detect（仅非 NER 模式）
 	restoreEng             *restore.Engine
 	websocketRedactionBeta bool
 }
@@ -176,6 +179,9 @@ func (s *Server) Start() error {
 	// ServeMux may return a 301 redirect, breaking HTTPS proxy traffic (clients keep reconnecting).
 	// Use a custom router here: only /manager/ goes to the admin UI; everything else goes to the proxy (including CONNECT).
 	adminHandler := s.admin.Handler()
+	mcpServer := mcp.NewServer(s.config, s.admin, s.GetRedactEngine(), version.Version)
+	mcpHandler := mcp.AuthMiddleware(mcpServer.Handler())
+
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r != nil {
 			if r.URL.Path == "/manager" {
@@ -184,6 +190,10 @@ func (s *Server) Start() error {
 			}
 			if strings.HasPrefix(r.URL.Path, "/manager/") {
 				adminHandler.ServeHTTP(w, r)
+				return
+			}
+			if r.URL.Path == "/mcp" {
+				mcpHandler.ServeHTTP(w, r)
 				return
 			}
 		}
@@ -212,6 +222,15 @@ func (s *Server) runtimeSnapshot() runtimeConfig {
 		return runtimeConfig{}
 	}
 	return v.(runtimeConfig)
+}
+
+// GetRedactEngine returns the current redact engine (nil if NER/pipeline mode is active)
+func (s *Server) GetRedactEngine() *redact.Engine {
+	if s == nil {
+		return nil
+	}
+	rt := s.runtimeSnapshot()
+	return rt.redactEngine
 }
 
 func (s *Server) shouldIntercept(host string) bool {
@@ -1274,6 +1293,7 @@ func (s *Server) applyConfig(c config.Config) {
 	}
 
 	var redactor redact.Redactor
+	var redactEng *redact.Engine
 	if len(ruleRecs) > 0 || c.Patterns.NER.Enabled {
 		var merged []piirec.Recognizer
 		// Keywords: merge into one recognizer to avoid duplicate scans.
@@ -1301,7 +1321,7 @@ func (s *Server) applyConfig(c config.Config) {
 		p.SetExclude(exclude)
 		redactor = p
 	} else {
-		redactEng := redact.NewEngine(s.session, prefix)
+			redactEng = redact.NewEngine(s.session, prefix)
 		for _, kw := range kws {
 			redactEng.AddKeyword(kw.Text, kw.Category)
 		}
@@ -1328,6 +1348,7 @@ func (s *Server) applyConfig(c config.Config) {
 		interceptMode:          interceptMode,
 		targets:                targets,
 		redactEng:              redactor,
+			redactEngine:           redactEng,
 		restoreEng:             restore.NewEngine(s.session, prefix),
 		websocketRedactionBeta: c.Proxy.WebSocketRedactionBeta,
 	})

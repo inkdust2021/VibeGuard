@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -187,6 +188,22 @@ Pattern is treated as a keyword (exact substring match).`,
 	RunE: runTest,
 }
 
+var mcpFormat string
+
+var mcpCmd = &cobra.Command{
+	Use:   "mcp",
+	Short: "MCP server configuration",
+	Long:  `Manage MCP server configuration for Claude Code integration.`,
+}
+
+var mcpSetupCmd = &cobra.Command{
+	Use:   "setup",
+	Short: "Generate MCP configuration for Claude Code",
+	Long: `Generate MCP server configuration for Claude Code integration.
+Reads the MCP token from the running VibeGuard instance.`,
+	RunE: runMcpSetup,
+}
+
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print version information",
@@ -213,6 +230,9 @@ func init() {
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(trustCmd)
 	rootCmd.AddCommand(testCmd)
+	rootCmd.AddCommand(mcpCmd)
+	mcpCmd.AddCommand(mcpSetupCmd)
+	mcpSetupCmd.Flags().StringVar(&mcpFormat, "format", "json", "output format: json or env")
 	rootCmd.AddCommand(versionCmd)
 
 	trustCmd.Flags().StringVar(&trustMode, "mode", string(cert.TrustInstallModeSystem), "trust store mode: system|user|auto")
@@ -1246,4 +1266,62 @@ func runTest(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+
+func runMcpSetup(cmd *cobra.Command, args []string) error {
+	lang := uiLang()
+
+	// 读取 MCP token
+	token, err := readMcpToken()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, uiText(lang, "错误: 无法读取 MCP token，请确保 VibeGuard 已启动", "Error: cannot read MCP token, make sure VibeGuard is running"))
+		return fmt.Errorf("read MCP token: %w", err)
+	}
+
+	// 读取代理监听地址
+	cfg := config.NewManager()
+	if err := cfg.Load(); err != nil {
+		// Load 失败时使用默认值
+		_ = err
+	}
+	c := cfg.Get()
+	listenAddr := c.Proxy.Listen
+	if listenAddr == "" {
+		listenAddr = "127.0.0.1:28657"
+	}
+
+	mcpURL := fmt.Sprintf("http://%s/mcp", listenAddr)
+
+	switch mcpFormat {
+	case "env":
+		fmt.Printf("VG_MCP_URL=%s\n", mcpURL)
+		fmt.Printf("VG_MCP_TOKEN=%s\n", token)
+	case "json":
+		fallthrough
+	default:
+		config := map[string]any{
+			"mcpServers": map[string]any{
+				"vibeguard": map[string]any{
+					"url": mcpURL,
+					"headers": map[string]any{
+						"Authorization": fmt.Sprintf("Bearer %s", token),
+					},
+				},
+			},
+		}
+		data, _ := json.MarshalIndent(config, "", "  ")
+		fmt.Println(string(data))
+	}
+
+	return nil
+}
+
+func readMcpToken() (string, error) {
+	path := filepath.Join(config.GetConfigDir(), "mcp_token")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(data)), nil
 }

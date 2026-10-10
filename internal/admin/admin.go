@@ -72,6 +72,14 @@ func (a *Admin) SetStartTime(unix int64) {
 	a.started.Store(unix)
 }
 
+// StartedTime returns the Unix timestamp when the proxy started
+func (a *Admin) StartedTime() int64 {
+	if a == nil {
+		return 0
+	}
+	return a.started.Load()
+}
+
 // RecordAudit records one audit event about whether redaction rules were hit.
 func (a *Admin) RecordAudit(ev AuditEvent) AuditEvent {
 	if a == nil || a.audit == nil {

@@ -53,6 +53,26 @@ func (e *Engine) AddKeyword(keyword, category string) {
 	e.keywords[keyword] = category
 }
 
+// ListKeywords returns all loaded keyword rules
+func (e *Engine) ListKeywords() map[string]string {
+	if e == nil {
+		return nil
+	}
+	result := make(map[string]string, len(e.keywords))
+	for k, v := range e.keywords {
+		result[k] = v
+	}
+	return result
+}
+
+// ListRegexCategories returns category for each loaded regex
+func (e *Engine) ListRegexCategories() []string {
+	if e == nil {
+		return nil
+	}
+	return append([]string(nil), e.regexCats...)
+}
+
 // AddRegex adds a regex pattern
 func (e *Engine) AddRegex(pattern, category string) error {
 	re, err := regexp.Compile(pattern)
@@ -67,6 +87,82 @@ func (e *Engine) AddRegex(pattern, category string) error {
 // AddExclude adds an exclude pattern
 func (e *Engine) AddExclude(pattern string) {
 	e.exclude[pattern] = true
+}
+
+// Detect 只读检测：扫描输入中的敏感数据，返回匹配列表，但不生成占位符、不注册到 session。
+func (e *Engine) Detect(input []byte) []Match {
+	e.ensureKeywordMatcher()
+	spans := textsafe.RedactableSpans(input)
+
+	var matches []Match
+	if e.kwAC != nil {
+		matches = make([]Match, 0, min(len(e.kwCats), 64))
+	}
+
+	for _, span := range spans {
+		segment := input[span.Start:span.End]
+		if len(segment) == 0 {
+			continue
+		}
+
+		if e.kwAC != nil {
+			scratchAny := e.kwScratch.Get()
+			lastEnd, _ := scratchAny.([]int)
+
+			e.kwAC.EachMatchNonOverlappingPerPattern(segment, lastEnd, func(id, start, end int) bool {
+				cat := ""
+				if id >= 0 && id < len(e.kwCats) {
+					cat = e.kwCats[id]
+				}
+				globalStart := span.Start + start
+				globalEnd := span.Start + end
+				orig := string(input[globalStart:globalEnd])
+				if e.isExcluded(orig) {
+					return true
+				}
+				matches = append(matches, Match{
+					Start:    globalStart,
+					End:      globalEnd,
+					Original: orig,
+					Category: cat,
+				})
+				return true
+			})
+
+			if lastEnd != nil {
+				e.kwScratch.Put(lastEnd)
+			}
+		}
+
+		for i, re := range e.regex {
+			locs := re.FindAllSubmatchIndex(segment, -1)
+			for _, loc := range locs {
+				if len(loc) < 2 {
+					continue
+				}
+				start, end := loc[0], loc[1]
+				if len(loc) >= 4 && loc[2] >= 0 && loc[3] >= 0 {
+					start, end = loc[2], loc[3]
+				}
+				globalStart := span.Start + start
+				globalEnd := span.Start + end
+				if globalStart < 0 || globalEnd < 0 || globalStart >= globalEnd || globalEnd > len(input) {
+					continue
+				}
+				original := string(input[globalStart:globalEnd])
+				if !e.isExcluded(original) {
+					matches = append(matches, Match{
+						Start:    globalStart,
+						End:      globalEnd,
+						Original: original,
+						Category: e.regexCats[i],
+					})
+				}
+			}
+		}
+	}
+
+	return matches
 }
 
 // Redact scans and redacts sensitive data from the input
