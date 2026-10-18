@@ -156,10 +156,12 @@ func (t *textStreamRestorer) Feed(fragment string) string {
 		return ""
 	}
 
-	out := t.eng.Restore(t.buf[:cut])
+	// Copy out before compacting: Restore returns its input slice unchanged when nothing matched,
+	// so `out` may alias t.buf and would be overwritten by the compaction below.
+	out := string(t.eng.Restore(t.buf[:cut]))
 	// Keep the tail (placeholder prefix or incomplete placeholder) and wait for the next fragment.
 	t.buf = append(t.buf[:0], t.buf[cut:]...)
-	return string(out)
+	return out
 }
 
 func (t *textStreamRestorer) Flush() string {
