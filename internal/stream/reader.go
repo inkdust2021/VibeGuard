@@ -25,6 +25,8 @@ type SSERestoringReader struct {
 	// to avoid losing buffered placeholder prefixes (e.g. the stream ends with "__V").
 	pendingDelta *pendingDeltaEvent
 	textRestorer *textStreamRestorer
+	// chat holds per-channel restorers for Chat Completions streams (see chat_completions.go).
+	chat *chatStreamState
 }
 
 // NewSSERestoringReader creates a new SSE restoring reader
@@ -73,6 +75,7 @@ func (r *SSERestoringReader) Read(p []byte) (int, error) {
 		if err != nil {
 			// On EOF/error, flush remaining buffered bytes
 			r.flushPendingDelta(true)
+			r.flushChatAll()
 			if r.buf.Len() > 0 {
 				remaining := make([]byte, r.buf.Len())
 				copy(remaining, r.buf.Bytes())
@@ -156,10 +159,12 @@ func (t *textStreamRestorer) Feed(fragment string) string {
 		return ""
 	}
 
-	out := t.eng.Restore(t.buf[:cut])
+	// Copy out before compacting: Restore returns its input slice unchanged when nothing matched,
+	// so `out` may alias t.buf and would be overwritten by the compaction below.
+	out := string(t.eng.Restore(t.buf[:cut]))
 	// Keep the tail (placeholder prefix or incomplete placeholder) and wait for the next fragment.
 	t.buf = append(t.buf[:0], t.buf[cut:]...)
-	return string(out)
+	return out
 }
 
 func (t *textStreamRestorer) Flush() string {
@@ -411,7 +416,13 @@ func (r *SSERestoringReader) handleEvent(event []byte) {
 	// Terminal events like [DONE] / done / completed: flush pendingDelta (with tail) first, then emit the terminal event.
 	if parsed.isTerminal {
 		r.flushPendingDelta(true)
+		r.flushChatAll()
 		r.outBuf.Write(r.restorer.Restore(event))
+		return
+	}
+
+	// Chat Completions chunks ({"choices":[{"delta":...}]}) carry no "delta" type; handle them per channel.
+	if r.handleChatChunk(parsed) {
 		return
 	}
 

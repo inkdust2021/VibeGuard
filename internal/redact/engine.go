@@ -34,6 +34,8 @@ type Engine struct {
 	exclude   map[string]bool
 	session   *session.Manager
 	prefix    string
+	phOnce    sync.Once
+	phRe      *regexp.Regexp
 }
 
 // NewEngine creates a new redaction engine
@@ -234,6 +236,14 @@ func (e *Engine) RedactWithMatches(input []byte) ([]byte, []Match) {
 		planned []Match
 		covered []span // sorted by start, non-overlapping
 	)
+	// Seed with placeholders already present in the input (e.g. the model wrote `TOKEN=__VG_X__` and it
+	// comes back in history). A broad rule must never wrap a placeholder in a second placeholder:
+	// restore is single-pass, so the tool would receive the inner placeholder instead of the real value.
+	if re := e.placeholderRegex(); re != nil {
+		for _, loc := range re.FindAllIndex(input, -1) {
+			covered = insertCovered(covered, span{start: loc[0], end: loc[1]})
+		}
+	}
 	for _, m := range matches {
 		for _, seg := range subtractCovered(m.Start, m.End, covered) {
 			if seg.start < 0 || seg.end > len(input) || seg.start >= seg.end {
@@ -275,6 +285,16 @@ func (e *Engine) RedactWithMatches(input []byte) ([]byte, []Match) {
 	}
 
 	return result, planned
+}
+
+// placeholderRegex matches complete placeholders for this engine's prefix (see restore.NewEngine).
+func (e *Engine) placeholderRegex() *regexp.Regexp {
+	e.phOnce.Do(func() {
+		if e.prefix != "" {
+			e.phRe = regexp.MustCompile(regexp.QuoteMeta(e.prefix) + `[A-Za-z0-9_]+_[a-f0-9]{12}(?:_\d+)?(?:__)?`)
+		}
+	})
+	return e.phRe
 }
 
 // isExcluded checks if a value is in the exclude list
