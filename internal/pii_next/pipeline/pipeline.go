@@ -1,6 +1,7 @@
 package pipeline
 
 import (
+	"regexp"
 	"sort"
 
 	"github.com/inkdust2021/vibeguard/internal/pii_next/recognizer"
@@ -17,14 +18,20 @@ type Pipeline struct {
 	// exclude is an exact-match allowlist: if a hit's value equals any entry, it will not be replaced.
 	// Note: regex/fuzzy matching is intentionally not supported to match existing vibeguard exclude semantics.
 	exclude map[string]struct{}
+	// placeholderRe matches placeholders already in the input; hits overlapping them are skipped.
+	placeholderRe *regexp.Regexp
 }
 
 func New(sess *session.Manager, prefix string, recs ...recognizer.Recognizer) *Pipeline {
-	return &Pipeline{
+	p := &Pipeline{
 		reg:    recognizer.NewRegistry(recs...),
 		sess:   sess,
 		prefix: prefix,
 	}
+	if prefix != "" {
+		p.placeholderRe = regexp.MustCompile(regexp.QuoteMeta(prefix) + `[A-Za-z0-9_]+_[a-f0-9]{12}(?:_\d+)?(?:__)?`)
+	}
+	return p
 }
 
 // SetExclude sets the exact-match skip list.
@@ -122,6 +129,14 @@ func (p *Pipeline) RedactWithMatches(input []byte) ([]byte, []redact.Match) {
 		covered = append(covered, span{})
 		copy(covered[i+1:], covered[i:])
 		covered[i] = s
+	}
+
+	// Never wrap an existing placeholder (e.g. `TOKEN=__VG_X__` echoed back in history) in a second one:
+	// restore is single-pass, so the tool would receive the inner placeholder instead of the real value.
+	if p.placeholderRe != nil {
+		for _, loc := range p.placeholderRe.FindAllIndex(input, -1) {
+			insert(span{start: loc[0], end: loc[1]})
+		}
 	}
 
 	var selected []recognizer.Match
